@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>ssheep — one binary, one file, one key</title>
-<meta name="description" content="Control a flock of machines. One command sets it up. One binary, one file, one key. Early software, not yet secure.">
+<meta name="description" content="Control a flock of machines. One command sets it up. No open ports, no accounts, and nobody's server to trust.">
 <meta property="og:title" content="ssheep — one binary, one file, one key">
 <meta property="og:description" content="Control a flock of machines. One command sets it up.">
 <meta property="og:url" content="https://ssheep.xyz/">
@@ -14,49 +14,47 @@
 </head>
 <body>
 
-<div class="vibe" title="no humans were harmed">
-  <span class="row">
-    <span class="arm">🦾</span><span class="head">🤖</span><span class="arm flip">🦾</span>
-  </span>
-  <span class="txt">100% Vibe Coded!</span>
+<div class="vibe">
+  <span class="bot"><span class="arm">🦾</span><span class="head">🤖</span><span class="arm flip">🦾</span></span>
+  <span class="hot">100% Vibe Coded!</span>
+  <span>· early prototype, no audit, not secure ·</span>
+  <a href="/about">how it works</a>
 </div>
 
 <div class="wrap">
 
-  <h1>ssheep</h1>
-  <p class="tag">One binary. One file. One key.</p>
-  <p class="muted" style="font-size:12.5px">Very early software: no audit, not secure, expect the protocol to move. <a href="/about">How it works</a>.</p>
+  <header class="head"><h1 class="big">ssheep</h1></header>
 
   <div class="grid">
 
     <div class="col">
-      <p>Control a flock of machines — your own boxes, wherever they are — without opening
-      a port, without an account, and without trusting anybody's server.</p>
+      <p class="lede">Every machine you own, wherever it is — a laptop, a VPS, a box under a
+      desk — in one flock. No open ports, no account, and not one server you have to trust.</p>
 
-      <pre class="art" aria-label="one master above a row of connectors, and a flock of sheep beneath them">
-                              👑
-                              │
-      ┌───────────────┬───────┴───────┬───────────────┐
-      │               │               │               │
-      📡              📡              📡              📡
-      │               │               │               │
- ┈──┬─┴┬──┬──┬──┬──┬──┴──┬──┬──┬──┬──┬┴─┬──┬──┬──┬──┬─┴┬──┬─┈
- 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑 🐑</pre>
+      <button class="cmd" type="button" data-copy="curl -fsSL https://ssheep.xyz/install.sh | sh">
+        <span class="s">$</span> curl -fsSL https://ssheep.xyz/install.sh | sh
+      </button>
+      <div class="btnrow">
+        <a href="https://github.com/bash3r777/ssheep/releases/latest">Download</a>
+        <a href="https://github.com/bash3r777/ssheep">Source</a>
+      </div>
 
-      <h2>Install</h2>
-      <pre data-copy="curl -fsSL https://ssheep.xyz/install.sh | sh"><code>curl -fsSL https://ssheep.xyz/install.sh | sh</code></pre>
-      <p>
-        <a class="btn" href="https://github.com/bash3r777/ssheep/releases/latest">Download</a>
-        <a class="btn" href="https://github.com/bash3r777/ssheep">Source</a>
-      </p>
-      <p class="muted" style="font-size:12px">Linux, macOS and Windows, amd64 and arm64. Static, nothing to install alongside it.</p>
+      <h2>What you get</h2>
+      <ul class="feat">
+        <li><span class="ic">🐑</span><span>Every machine you own, in one flock, whatever network each one is on</span></li>
+        <li><span class="ic">🔓</span><span>No open ports, no port forwarding, no public IP on the machines you manage</span></li>
+        <li><span class="ic">🔑</span><span>One key to keep. It signs who is in — and never has to be online</span></li>
+        <li><span class="ic">🙈</span><span>The relay forwards ciphertext it cannot read, forge, or open</span></li>
+        <li><span class="ic">📡</span><span>Any reachable machine can be a connector, and losing one costs you nothing</span></li>
+        <li><span class="ic">🧰</span><span>One static binary, no dependencies, nothing to install alongside it</span></li>
+      </ul>
     </div>
 
     <div class="col">
       <h2>Use — three steps</h2>
       <div class="win">
         <div class="tbar"><i class="dt r"></i><i class="dt y"></i><i class="dt g"></i><span class="tt">ssheep — set up a flock</span></div>
-        <div class="tbody"><pre class="dash"><span class="c">step 1</span>  <span class="m">on the machine you control from:</span>
+        <div class="tbody"><pre><span class="c">step 1</span>  <span class="m">on the machine you control from:</span>
 <span class="p">$</span> ssheep master
 <span class="g">👑</span>  master ready — flock "myflock"
     connectors  relay.ssheep.xyz:7000
@@ -76,40 +74,84 @@ sheep-1|  14:22:01 up 3 days,  2:14,  load average: 0.08
 sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
 <span class="c">❯</span> <span class="cur"></span></pre></div>
       </div>
-      <p class="muted" style="font-size:12px">That is the whole setup. The connector works out its own address and tells the
-      flock, so there is no address or fingerprint to copy anywhere.</p>
+      <p class="muted" style="font-size:12.5px">That is the whole setup. The connector works out its own address and tells the
+      flock, so there is nothing to copy between machines but the ticket itself.</p>
     </div>
 
   </div>
 
-  <div class="grid2">
+  <h2>How it fits together</h2>
+  <div class="diagram">
+    <svg class="dg" viewBox="0 0 1000 320" role="img" aria-label="A master and many sheep all dialling out to connectors in the middle. Nothing listens for connections except the connectors.">
 
-    <div class="col">
-      <h2>For humans</h2>
-      <div class="step"><span class="n">👑</span><span class="x"><b>master</b> — holds the flock key, mints tickets, runs commands. Needs no reachable address, so it can be a laptop that is usually off.</span></div>
-      <div class="step"><span class="n">🐑</span><span class="x"><b>sheep</b> — a machine in the flock. Only ever dials <em>out</em>. Holds nothing but its own key.</span></div>
-      <div class="step"><span class="n">📡</span><span class="x"><b>connector</b> — a blind relay and address book, and a member of the flock like anything else. The only role needing a reachable address.</span></div>
-      <p class="muted" style="font-size:12.5px;margin-top:12px">It is one binary; the role is the subcommand. Every default can be changed —
-      flock name, relay, how many tickets, the port. <a href="/about">More, for humans</a>.</p>
-    </div>
+      <!-- wires -->
+      <path class="wire" d="M500 56 V100"/>
+      <path class="wire" d="M180 100 H820"/>
+      <path class="wire" d="M180 100 V140"/><path class="wire" d="M500 100 V140"/><path class="wire" d="M820 100 V140"/>
+      <path class="wire" d="M180 180 V220"/><path class="wire" d="M500 180 V220"/><path class="wire" d="M820 180 V220"/>
+      <path class="wire" d="M70 220 H930"/>
+      <path class="wire" d="M70 220 V262"/><path class="wire" d="M290 220 V262"/>
+      <path class="wire" d="M390 220 V262"/><path class="wire" d="M610 220 V262"/>
+      <path class="wire" d="M710 220 V262"/><path class="wire" d="M930 220 V262"/>
 
-    <div class="col">
-      <h2>For agents</h2>
-      <p><a href="/agents.txt">/agents.txt</a> is a short, machine-readable version of this page: what
-      the tool is, how to install it, the exact commands, and the gotchas worth knowing
-      before you touch somebody's machines.</p>
-      <pre data-copy="curl -fsSL https://ssheep.xyz/agents.txt"><code>curl -fsSL https://ssheep.xyz/agents.txt</code></pre>
-      <p class="muted" style="font-size:12.5px">Pointing a coding agent at that file is enough for it to set up and operate a flock.</p>
-    </div>
+      <!-- the direction of travel: outbound, always outbound -->
+      <path class="flow" d="M180 140 V100 H500"/>
+      <path class="flow" d="M820 140 V100 H500"/>
+      <path class="flow" d="M70 220 H180 V180"/>
+      <path class="flow" d="M930 220 H820 V180"/>
 
+      <!-- arrowheads into the connectors -->
+      <g fill="#33465e">
+        <polygon points="180,140 175,130 185,130"/>
+        <polygon points="500,140 495,130 505,130"/>
+        <polygon points="820,140 815,130 825,130"/>
+        <polygon points="180,180 175,190 185,190"/>
+        <polygon points="500,180 495,190 505,190"/>
+        <polygon points="820,180 815,190 825,190"/>
+      </g>
+
+      <!-- nodes -->
+      <rect class="box box-master" x="410" y="16" width="180" height="40"/>
+      <text x="500" y="37" text-anchor="middle" dominant-baseline="middle">👑 master</text>
+
+      <rect class="box" x="105" y="140" width="150" height="40"/>
+      <rect class="box" x="425" y="140" width="150" height="40"/>
+      <rect class="box" x="745" y="140" width="150" height="40"/>
+      <text x="180" y="161" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
+      <text x="500" y="161" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
+      <text x="820" y="161" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
+
+      <rect class="box" x="15" y="262" width="110" height="34"/>
+      <rect class="box" x="235" y="262" width="110" height="34"/>
+      <rect class="box" x="335" y="262" width="110" height="34"/>
+      <rect class="box" x="555" y="262" width="110" height="34"/>
+      <rect class="box" x="655" y="262" width="110" height="34"/>
+      <rect class="box" x="875" y="262" width="110" height="34"/>
+      <text x="70" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="290" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="390" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="610" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="710" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="930" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+
+      <!-- labels -->
+      <text class="lbl" x="410" y="37" text-anchor="end" dominant-baseline="middle">you hold the key →</text>
+      <text class="lbl" x="100" y="161" text-anchor="end" dominant-baseline="middle">blind relays</text>
+      <text class="lbl" x="500" y="312" text-anchor="middle">every line is an outbound connection — only the connectors are reachable at all</text>
+
+      <!-- the master is the only thing awake, so mark it -->
+      <circle class="dot" cx="566" cy="36" r="3"/>
+    </svg>
   </div>
+  <p class="muted" style="font-size:12.5px">The master and the sheep both dial <em>out</em> to a connector; nothing on them ever
+  listens. A connector checks that each machine holds the key the roster says it holds, then
+  forwards opaque payloads between them — it can see who is talking, never what about.</p>
 
   <footer>
-    <span>ssheep — free software, GPL-3.0-or-later</span>
+    <a href="/about">about</a>
     <a href="https://github.com/bash3r777/ssheep/releases/latest">download</a>
     <a href="https://github.com/bash3r777/ssheep">source</a>
     <a href="/agents.txt">agents</a>
-    <span>no accounts, no telemetry</span>
   </footer>
 
 </div>
