@@ -1,10 +1,10 @@
-# How sshepard works
+# How ssheep works
 
 ## The shape
 
 ```
           invite (a ticket)                join
-  shepherd ─────────────────►  sheep  ──────────────►  connector
+  master ─────────────────►  sheep  ──────────────►  connector
    (no open ports)              │                          │
                                 │  end-to-end encrypted    │  relays, cannot read
                                 └──────────  ......  ──────┘
@@ -14,11 +14,11 @@ Three roles, one binary.
 
 | Role | Job | Holds secrets | Must be reachable |
 |---|---|---|---|
-| **shepherd** | Mints invites, issues commands, holds the authority key | yes — the flock key | no |
+| **master** | Mints invites, issues commands, holds the authority key | yes — the flock key | no |
 | **connector** | Address book and relay | no | yes |
 | **sheep** | Does the work | only its own key | no |
 
-Sheep and shepherds only ever dial *out*. That is why no ports need to be
+Sheep and masters only ever dial *out*. That is why no ports need to be
 open anywhere except on the connector — and a connector can be any machine
 that happens to be reachable, including another sheep.
 
@@ -40,7 +40,7 @@ operator hands it over deliberately.
 
 ## Joining
 
-1. `sshepard invite --name pi` generates a key pair for the new machine, adds
+1. `ssheep invite --name pi` generates a key pair for the new machine, adds
    its public key to the roster, re-signs the roster and prints a ticket.
 2. The ticket goes to the new machine, which installs two files: its own private
    key, and a copy of the roster.
@@ -50,7 +50,7 @@ operator hands it over deliberately.
    learns it in the same breath. No secret is ever sent to the connector.
 4. From then on it is simply *in*.
 
-The ticket is single use in the sense that it carries a key pair. `sshepard
+The ticket is single use in the sense that it carries a key pair. `ssheep
 forget --name pi` removes the entry and re-signs, which is the revocation.
 
 ## What the connector can and cannot do
@@ -71,7 +71,7 @@ It cannot:
 - accept a roster signed by anybody other than that flock's key
 - route between flocks, or tell one flock about another
 
-Every payload the connector forwards is encrypted between shepherd and sheep
+Every payload the connector forwards is encrypted between master and sheep
 using keys it never sees. So running a connector on somebody else's machine is
 not a trust decision.
 
@@ -84,7 +84,7 @@ Two layers.
 only the envelope — who is asking and who they want to reach, plus the flock id
 and the roster that proves it. The payload inside a `route` is opaque to it.
 
-**Session layer.** Between a shepherd and a sheep, inside those opaque payloads.
+**Session layer.** Between a master and a sheep, inside those opaque payloads.
 Each side generates an ephemeral X25519 key, signs it with its permanent Ed25519
 key, and the signatures are checked against the roster. The transcript covers
 both ephemeral keys and both identities, so neither a replayed nor a reordered
@@ -146,14 +146,14 @@ anyone. So a flock lists as many as it likes.
 - **Every sheep connects to all of them** and holds each link open. If one goes
   down the sheep logs it, backs off, and rejoins when it comes back. Losing a
   connector costs the flock nothing.
-- **A shepherd tries them in roster order** and uses the first that answers, so
+- **A master tries them in roster order** and uses the first that answers, so
   the order *is* the preference order. A dead connector costs five seconds, not
   a broken command.
-- **Sessions are per link.** A shepherd reaching a sheep through one connector is
-  a different conversation from the same shepherd reaching it through another,
+- **Sessions are per link.** A master reaching a sheep through one connector is
+  a different conversation from the same master reaching it through another,
   because the two paths have nothing to do with each other.
 
-`sshepard connector add --addr <host:port>` reads the fingerprint from the
+`ssheep connector add --addr <host:port>` reads the fingerprint from the
 connector itself, rewrites the roster and publishes it. `connector list` probes
 each one and reports whether it answers — and whether its fingerprint has
 *changed*, which is the one failure that should never pass silently.

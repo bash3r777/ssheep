@@ -21,7 +21,7 @@ const (
 
 // AuthContext prefixes the authentication signature, so a signature made for one
 // purpose can never be replayed as another.
-const AuthContext = "sshepard-auth|"
+const AuthContext = "ssheep-auth|"
 
 // Envelope is the only thing a connector parses.
 type Envelope struct {

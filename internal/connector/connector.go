@@ -24,11 +24,11 @@ import (
 	"sync"
 	"time"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/frame"
-	"sshepard.com/internal/netx"
-	"sshepard.com/internal/peer"
-	"sshepard.com/internal/proto"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/netx"
+	"ssheep.xyz/internal/peer"
+	"ssheep.xyz/internal/proto"
 )
 
 // Config describes how a connector should behave.

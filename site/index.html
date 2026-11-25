@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ssheep — one binary, one file, one key</title>
+<meta name="description" content="Coordinate and control a flock of machines. One binary, one file, one key. Early software, not yet secure.">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+
+  <h1>ssheep</h1>
+  <p class="tag">One binary. One file. One key.</p>
+
+  <div class="warn">
+    <strong>Very early. Not secure.</strong> This is a working prototype, published because
+    it is useful, not because it is safe. There has been no audit. Do not use it for
+    anything you would be upset to lose. Expect the protocol to change.
+  </div>
+
+  <p>Control a flock of machines — your own boxes, wherever they are — without opening a
+  port, without an account, and without trusting anybody's server.</p>
+
+  <h2>Three things</h2>
+  <table>
+    <tr><td>👑 <b>master</b></td><td>Holds the flock key, mints invites, runs commands. Can sit behind a NAT, switched off most of the time.</td></tr>
+    <tr><td>🐑 <b>sheep</b></td><td>A machine in the flock. Only ever dials <em>out</em>. Holds nothing but its own key.</td></tr>
+    <tr><td>📡 <b>connector</b></td><td>A blind relay and address book. The only one that needs a reachable address. It forwards ciphertext it cannot read.</td></tr>
+  </table>
+
+  <h2>Install</h2>
+  <pre><code>curl -fsSL https://ssheep.xyz/install.sh | sh</code><button class="copy">copy</button></pre>
+  <p>
+    <a class="btn" href="https://github.com/bash3r777/ssheep/releases/latest">Download</a>
+    <a class="btn" href="https://github.com/bash3r777/ssheep">Source</a>
+  </p>
+  <p class="muted">Static binaries for Linux, macOS and Windows, amd64 and arm64. Nothing to install alongside it.</p>
+
+  <h2>Use</h2>
+  <p>On the machine that will be your 👑 master:</p>
+  <pre><code>ssheep init --name myflock</code><button class="copy">copy</button></pre>
+  <p>On a machine with a reachable address — a small VPS is the usual choice:</p>
+  <pre><code>ssheep connector --listen :7000</code><button class="copy">copy</button></pre>
+  <p>Then, back on the 👑 master:</p>
+  <pre><code>ssheep connector add --addr &lt;that machine&gt;:7000
+ssheep invite --name pi --out pi.ticket</code><button class="copy">copy</button></pre>
+  <p>Copy <code>pi.ticket</code> to the new machine, put the binary there too, and run:</p>
+  <pre><code>ssheep sheep --invite-file pi.ticket --install-only</code><button class="copy">copy</button></pre>
+  <p>Now it is in the flock:</p>
+  <pre><code>ssheep see
+ssheep run --name pi -- uptime
+ssheep run --all -- uptime</code><button class="copy">copy</button></pre>
+
+  <h2>For humans</h2>
+  <p>
+    Read <a href="/about">how it works</a> — the roster, the keys, what the connector can
+    and cannot see, and what is deliberately missing. The full architecture notes live in the
+    repo at <code>docs/ARCHITECTURE.md</code>.
+  </p>
+
+  <h2>For agents</h2>
+  <p>
+    <a href="/agents.txt">/agents.txt</a> is a short, machine-readable version of this page:
+    what the tool is, how to install it, and the exact commands, with no prose to wade through.
+    Pointing a coding agent at that file is enough for it to operate a flock.
+  </p>
+
+  <footer>
+    ssheep is free software (GPL-3.0-or-later). No accounts, no telemetry, nothing phones home.
+  </footer>
+
+</main>
+<script>
+for (const b of document.querySelectorAll('.copy')) {
+  b.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(b.previousElementSibling.textContent.trim());
+    b.textContent = 'copied'; setTimeout(() => b.textContent = 'copy', 1200);
+  });
+}
+</script>
+</body>
+</html>

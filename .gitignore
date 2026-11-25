@@ -8,7 +8,7 @@
 *.pem
 *.invite.json
 *.invite
-/sshepard
+/ssheep
 
 # Editor / OS noise
 .DS_Store

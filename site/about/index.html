@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ssheep — how it works</title>
+<meta name="description" content="How ssheep works: the roster, the keys, what a connector can and cannot see.">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+
+  <h1 style="font-size:2rem">How it works</h1>
+  <p class="tag">Short version: a signed file, a key, and a blind relay.</p>
+
+  <div class="warn">
+    <strong>Very early. Not secure.</strong> A working prototype, not an audited tool.
+    The protocol will change. Do not use it for anything you would be upset to lose.
+  </div>
+
+  <h2>The three roles</h2>
+  <table>
+    <tr><td>👑 <b>master</b></td><td>Holds the flock key, mints invites, sends commands. Needs no reachable address, so it can be a laptop that is usually off.</td></tr>
+    <tr><td>🐑 <b>sheep</b></td><td>A managed machine. Dials out and keeps the connection open. Holds only its own private key.</td></tr>
+    <tr><td>📡 <b>connector</b></td><td>A directory and a relay. The only machine that needs a reachable address — and it can be any machine, including one of the sheep.</td></tr>
+  </table>
+  <p>It is one binary. The role is just the subcommand you run.</p>
+
+  <h2>What actually keeps it safe</h2>
+  <h3>The roster is a file, and it is public</h3>
+  <p>It lists who is in the flock and their public keys, and it is signed by the flock key.
+  Every member holds a copy, so there is no database to back up and no server to restore.
+  Keep it in git and you have an audit trail of every machine ever added.</p>
+
+  <h3>The only secret is the flock key</h3>
+  <p>It signs rosters, so it is needed to add or remove a machine — and for nothing else.
+  Keep it offline, and never on a connector.</p>
+
+  <h3>Peers verify each other, not the relay</h3>
+  <p>A connector checks that a connecting machine holds the key the roster says it holds, and
+  then forwards opaque payloads. Master and sheep agree on an encryption key between
+  themselves, using ephemeral keys signed by their permanent ones. The connector sees
+  ciphertext it can neither read nor forge. That is why it does not matter whose
+  machine a connector runs on.</p>
+
+  <table>
+    <tr><td>A connector <b>can</b></td><td>see which machines are talking, when, and what they are called</td></tr>
+    <tr><td>A connector <b>cannot</b></td><td>read a command or its output, forge one, impersonate anyone, or add itself to the flock</td></tr>
+  </table>
+
+  <h2>Adding and removing machines</h2>
+  <p><code>ssheep invite --name pi</code> generates a key pair for the new machine, adds its
+  public key to the roster, re-signs it, and prints a single-use ticket. The ticket carries
+  that machine's private key, so hand it over privately. <code>ssheep forget --name pi</code>
+  removes it and publishes the new roster; connectors drop it within seconds.</p>
+
+  <h2>More than one connector</h2>
+  <p>A single connector is a single point of failure, which is a strange thing for a tool
+  whose point is not needing anyone. A flock can list several: every sheep keeps a link to
+  each of them, and a master tries them in order. Losing one costs the flock nothing.</p>
+
+  <h2>What is missing</h2>
+  <p>Direct peer-to-peer connections, an interactive shell, and file transfer. Today every
+  byte goes through a connector, and <code>run</code> executes a command and streams its
+  output back. The relay path is the floor; direct connections would sit on top of it
+  rather than replace it.</p>
+
+  <footer>
+    <a href="/">← ssheep</a> · <a href="/agents.txt">for agents</a> ·
+    <a href="https://github.com/bash3r777/ssheep">source</a> · GPL-3.0-or-later
+  </footer>
+
+</main>
+</body>
+</html>

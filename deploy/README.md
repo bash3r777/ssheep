@@ -1,4 +1,4 @@
-# Deploying sshepard
+# Deploying ssheep
 
 ## The connector
 
@@ -6,39 +6,39 @@ One machine in the flock has to be reachable. That is the connector, and it is
 the only machine that needs a reachable address at all.
 
 ```sh
-install -m 0755 sshepard /usr/local/bin/sshepard
-install -m 0644 deploy/sshepard-connector.service /etc/systemd/system/
+install -m 0755 ssheep /usr/local/bin/ssheep
+install -m 0644 deploy/ssheep-connector.service /etc/systemd/system/
 systemctl daemon-reload
 ```
 
 It needs one file to run: the flock's roster.
 
 ```sh
-# on the shepherd machine
-sshepard init --name myflock
+# on the master machine
+ssheep init --name myflock
 
 # on the connector
-mkdir -p /var/lib/sshepard
-scp shepherd-box:~/.sshepard/roster.json /var/lib/sshepard/
-systemctl enable --now sshepard-connector
-journalctl -u sshepard-connector | grep -i fingerprint
+mkdir -p /var/lib/ssheep
+scp master-box:~/.ssheep/roster.json /var/lib/ssheep/
+systemctl enable --now ssheep-connector
+journalctl -u ssheep-connector | grep -i fingerprint
 ```
 
 The connector generates its TLS certificate on first start and prints its
-fingerprint. Register it from the shepherd machine — this reads the fingerprint
+fingerprint. Register it from the master machine — this reads the fingerprint
 from the connector itself and publishes the roster, so nothing needs copying by
 hand:
 
 ```sh
-sshepard connector add --addr <host:port>
-sshepard connector list
+ssheep connector add --addr <host:port>
+ssheep connector list
 ```
 
 A connector adopts a roster only when it verifies and is signed by the flock key
 it already trusts.
 
 **Run more than one.** Two connectors on different networks turn a bad afternoon
-into a non-event; every sheep holds a link to each of them, and a shepherd falls
+into a non-event; every sheep holds a link to each of them, and a master falls
 through the list. `connector add` twice is the whole procedure.
 
 Because the connector is blind, it is the least valuable machine in the flock.
@@ -53,7 +53,7 @@ A machine with a good network position can serve strangers. Start it with
 being told about a single one of them in advance.
 
 ```sh
-sshepard connector --public --listen :7000 \
+ssheep connector --public --listen :7000 \
   --max-flocks 100 --max-conns 2000 --max-members 1000
 ```
 
@@ -75,18 +75,18 @@ public relay, add `--public` and the limits to `ExecStart`.
 ## A sheep
 
 ```sh
-install -m 0755 sshepard /usr/local/bin/sshepard
-useradd --system --home /var/lib/sshepard --create-home sshepard
-install -m 0644 deploy/sshepard-sheep.service /etc/systemd/system/
+install -m 0755 ssheep /usr/local/bin/ssheep
+useradd --system --home /var/lib/ssheep --create-home ssheep
+install -m 0644 deploy/ssheep-sheep.service /etc/systemd/system/
 systemctl daemon-reload
 
 # one time: unpack the ticket you were handed
-sshepard sheep --dir /var/lib/sshepard --invite-file /root/pi.invite.json --install-only
+ssheep sheep --dir /var/lib/ssheep --invite-file /root/pi.invite.json --install-only
 
-systemctl enable --now sshepard-sheep
+systemctl enable --now ssheep-sheep
 ```
 
-`--install-only` unpacks the ticket and exits. Without it, `sshepard sheep`
+`--install-only` unpacks the ticket and exits. Without it, `ssheep sheep`
 installs first if there is no identity yet, then serves — so the same line works
 in a provisioning script on a fresh machine and as a no-op on one that is
 already enrolled. It never overwrites an existing identity.
@@ -94,7 +94,7 @@ already enrolled. It never overwrites an existing identity.
 ## Verifying
 
 ```sh
-sshepard see                      # every machine, and whether it is online
-sshepard run --name pi -- uptime  # one machine
-sshepard run --all -- uptime      # all of them at once
+ssheep see                      # every machine, and whether it is online
+ssheep run --name pi -- uptime  # one machine
+ssheep run --all -- uptime      # all of them at once
 ```

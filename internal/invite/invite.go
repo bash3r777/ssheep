@@ -16,7 +16,7 @@ import (
 	"os"
 	"strings"
 
-	"sshepard.com/internal/flock"
+	"ssheep.xyz/internal/flock"
 )
 
 // Version is bumped when the invite layout changes.

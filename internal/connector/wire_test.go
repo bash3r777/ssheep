@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/proto"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/proto"
 )
 
 // The relay can only believe an offered roster if the signature survives the

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/frame"
-	"sshepard.com/internal/peer"
-	"sshepard.com/internal/proto"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/peer"
+	"ssheep.xyz/internal/proto"
 )
 
 // A machine that has been connected for weeks only ever learns about a change if

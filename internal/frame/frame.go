@@ -1,6 +1,6 @@
 // Package frame moves length-prefixed messages over a stream.
 //
-// Every connection in sshepard speaks the same framing. The connector routes
+// Every connection in ssheep speaks the same framing. The connector routes
 // frames without understanding what is inside them.
 package frame
 

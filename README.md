@@ -1,91 +1,83 @@
-# sshepard
+# ssheep
 
 **One binary. One file. One key.**
 
-sshepard is the smallest way to coordinate, control and manage a flock of machines.
+Control a flock of machines — your own boxes, wherever they are — without opening
+a port, without an account, and without trusting anybody's server.
 
-Drop one static binary on a machine, paste one line, and it is in the flock. The
-flock itself is a small signed file you keep in git — the roster of who is in. The
-only secret is your authority key, which you keep offline and never share.
+> **Very early. Not secure.** A working prototype, published because it is useful,
+> not because it is safe. There has been no audit. Do not use it for anything you
+> would be upset to lose. Expect the protocol to change.
 
-- **No ports open.** Sheep and the shepherd only ever dial out.
-- **No accounts, no service to sign up for.** You own the whole thing.
-- **No dependencies on the machine.** No Python, no daemon install, no config files.
-- **End-to-end encrypted.** A connector forwards ciphertext and cannot read it.
-- **Works offline, forever.** The flock keeps running when nobody is reachable.
+## Three things, one binary
 
-## The three roles, one binary
+| | | |
+|---|---|---|
+| 👑 | **master** | Holds the flock key, mints invites, runs commands. Needs no reachable address — a laptop that is usually off will do. |
+| 🐑 | **sheep** | A machine in the flock. Only ever dials *out*. Holds nothing but its own key. |
+| 📡 | **connector** | A blind relay and address book. The only role needing a reachable address, and it can be any machine, including a sheep. |
 
-| Role | What it does | Holds secrets | Must be reachable |
-|---|---|---|---|
-| `shepherd` | Mints invites, issues commands, holds the authority key | yes — the flock key | no |
-| `connector` | Address book and relay. Blind by design, and can serve many flocks. | no | yes |
-| `sheep` | Does the work | only its own key | no |
+The roster — a small signed file listing who is in the flock — is public and
+replicated, so there is no database to lose. The only secret is the flock key,
+needed only to add or remove a machine. Peers verify each other end to end: a
+connector forwards ciphertext it can neither read nor forge.
 
-Roles are hats, not programs. A machine that happens to be reachable can also act
-as a connector, so a flock with no VPS is possible.
+## Install
 
-## The model
-
-- The **roster** is public and replicated. Anyone in the flock can hold a copy, so
-  there is no database to back up and no server to restore.
-- The **authority** is 32 bytes you keep in your pocket. It signs the roster.
-- Every member has its own key. Private keys never leave the machine they belong to.
-- Peers verify each other directly, so a compromised connector cannot impersonate anyone.
-
-## The verbs
-
+```sh
+curl -fsSL https://ssheep.xyz/install.sh | sh
 ```
-sshepard init               create a flock
-sshepard connector          run an address book and relay
-sshepard connector add      register a connector with the flock
-sshepard connector list     show them, and whether they answer
-sshepard invite             mint a single-use invite for a new machine
-sshepard see                show the flock, live
-sshepard run                run a command on one machine or all of them
-sshepard forget             revoke a machine
+
+Static binaries for Linux, macOS and Windows (amd64, arm64), or build it:
+
+```sh
+git clone https://github.com/bash3r777/ssheep && cd ssheep && make build
 ```
 
 ## Quick start
 
 ```sh
-# On the machine that will be your shepherd
-sshepard init --name myflock
+# on the machine that will be your master
+ssheep init --name myflock
 
-# On a machine that is reachable from everywhere
-sshepard connector --listen :7000
+# on a machine with a reachable address — a small VPS, usually
+ssheep connector --listen :7000
 
-# Register it. This reads its fingerprint from the connector itself, and
-# publishes the roster so the connector knows the flock.
-sshepard connector add --addr <that machine>:7000
+# back on the master: register it, then mint a ticket for a new machine
+ssheep connector add --addr <that machine>:7000
+ssheep invite --name pi --out pi.ticket
 
-# Add a machine
-sshepard invite --name pi --out pi.ticket
-#   copy pi.ticket and the binary across, then on the new machine:
-#   sshepard sheep --invite-file pi.ticket --install-only
+# on the new machine, with the binary and the ticket
+ssheep sheep --invite-file pi.ticket --install-only
 
-# Use it
-sshepard see
-sshepard run --name pi -- uptime
+# use it
+ssheep see
+ssheep run --name pi -- uptime
+ssheep run --all -- uptime
 ```
 
-Add a second connector early. With only one, its bad day is the flock's bad
-day — every machine tries the connectors in order and survives losing any of
-them.
+Add a second connector early. Machines try them in roster order and survive
+losing any of them; one connector is a single point of failure.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it works underneath.
+## Where to read more
+
+- [ssheep.xyz](https://ssheep.xyz) — what it is, in one page
+- [ssheep.xyz/about](https://ssheep.xyz/about) — how it works, for humans
+- [ssheep.xyz/agents.txt](https://ssheep.xyz/agents.txt) — the same, for agents
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — the full design, and what is deliberately missing
+- [deploy/README.md](deploy/README.md) — running a connector and a sheep under systemd
 
 ## Status
 
 Early, but working end to end: identity, invites, connectors, failover across
-more than one of them, many flocks on one relay, the relay path, `see`, `run` on
-one machine or all of them, and revocation.
+more than one of them, many flocks on one relay, the relay path, `see`, `run`,
+and revocation across networks.
 
-Next: the public relay pool — a signed directory of volunteers plus client-side
-selection — so a new user with no public IP anywhere can still join. Direct
-connections (IPv6, UPnP, hole punching) sit on top of the relay rather than
-replacing it: the relay stays as the fallback that always works.
+Known gaps: online/offline is reported per connector, so with several connectors a
+machine connected to a different one can show as offline. There is no interactive
+shell and no file transfer. Direct connections (IPv6, UPnP, hole punching) would
+sit on top of the relay rather than replace it.
 
-## License
+## Licence
 
 GPL-3.0-or-later.

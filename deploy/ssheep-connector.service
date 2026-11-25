@@ -1,6 +1,6 @@
 [Unit]
-Description=sshepard connector (flock address book and relay)
-Documentation=https://sshepard.com
+Description=ssheep connector (flock address book and relay)
+Documentation=https://ssheep.xyz
 After=network-online.target
 Wants=network-online.target
 
@@ -8,13 +8,13 @@ Wants=network-online.target
 Type=simple
 # The connector holds no secrets. It needs the public roster and its own TLS
 # certificate, both of which live in its state directory.
-ExecStart=/usr/local/bin/sshepard connector --dir /var/lib/sshepard --listen :7000
+ExecStart=/usr/local/bin/ssheep connector --dir /var/lib/ssheep --listen :7000
 Restart=always
 RestartSec=3
 
 # A connector is a small, blind relay. Give it as little as it needs.
 DynamicUser=yes
-StateDirectory=sshepard
+StateDirectory=ssheep
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

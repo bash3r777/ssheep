@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"sshepard.com/internal/proto"
+	"ssheep.xyz/internal/proto"
 )
 
 // The connector routes with the envelope's target and reports failures with it,

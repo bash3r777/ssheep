@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/peer"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/peer"
 )
 
 func newServer(t *testing.T, cfg Config) *Server {

@@ -6,7 +6,7 @@
 //
 // A sheep connects to every connector in the flock at once. That is what makes
 // more than one connector worth having: the flock survives any one of them
-// dying, and a shepherd can reach this machine through whichever one it is
+// dying, and a master can reach this machine through whichever one it is
 // talking to.
 package sheep
 
@@ -24,12 +24,12 @@ import (
 	"sync"
 	"time"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/frame"
-	"sshepard.com/internal/invite"
-	"sshepard.com/internal/peer"
-	"sshepard.com/internal/proto"
-	"sshepard.com/internal/tunnel"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/invite"
+	"ssheep.xyz/internal/peer"
+	"ssheep.xyz/internal/proto"
+	"ssheep.xyz/internal/tunnel"
 )
 
 // errRevoked means the flock no longer contains this machine. Retrying will not
@@ -360,8 +360,8 @@ func (a *Agent) adoptRoster(env *proto.Envelope) {
 }
 
 // link is one live connection to one connector. Sessions live here rather than
-// on the agent, because a shepherd reaching us through connector A is a
-// different conversation from the same shepherd reaching us through connector B.
+// on the agent, because a master reaching us through connector A is a
+// different conversation from the same master reaching us through connector B.
 type link struct {
 	addr string
 	conn *frame.Conn
@@ -390,8 +390,8 @@ func (a *Agent) handle(l *link, from string, payload []byte) {
 	switch w.Kind {
 	case tunnel.KindKex1:
 		m := a.member(from)
-		if m == nil || m.Role != flock.RoleShepherd {
-			log.Printf("sheep: refusing a handshake from %s (not a shepherd)", from)
+		if m == nil || m.Role != flock.RoleMaster {
+			log.Printf("sheep: refusing a handshake from %s (not a master)", from)
 			return
 		}
 		reply, sess, err := tunnel.Respond(a.key.SignKey(), a.id, from, ed25519.PublicKey(m.SignKey), w)

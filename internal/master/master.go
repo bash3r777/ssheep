@@ -1,8 +1,8 @@
-// Package shepherd is the operator side: the commands you run against the flock.
+// Package master is the operator side: the commands you run against the flock.
 //
-// A shepherd connects to a connector like any other member, then speaks to each
+// A master connects to a connector like any other member, then speaks to each
 // sheep through an end-to-end encrypted session the connector cannot open.
-package shepherd
+package master
 
 import (
 	"crypto/ed25519"
@@ -15,11 +15,11 @@ import (
 	"sync"
 	"time"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/frame"
-	"sshepard.com/internal/peer"
-	"sshepard.com/internal/proto"
-	"sshepard.com/internal/tunnel"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/peer"
+	"ssheep.xyz/internal/proto"
+	"ssheep.xyz/internal/tunnel"
 )
 
 // handshakeTimeout bounds how long we wait for a sheep to answer a handshake.
@@ -66,10 +66,10 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 	id := flock.NodeID(key.SignPub())
 	m := roster.Find(id)
 	if m == nil {
-		return nil, fmt.Errorf("shepherd: this machine (%s) is not in the roster", id)
+		return nil, fmt.Errorf("master: this machine (%s) is not in the roster", id)
 	}
-	if m.Role != flock.RoleShepherd {
-		return nil, fmt.Errorf("shepherd: this machine is enrolled as %q, and only a shepherd can issue commands", m.Role)
+	if m.Role != flock.RoleMaster {
+		return nil, fmt.Errorf("master: this machine is enrolled as %q, and only a master can issue commands", m.Role)
 	}
 	connectors, err := roster.ConnectorsFor(connectorAddr)
 	if err != nil {
@@ -112,7 +112,7 @@ func dialAny(connectors []flock.Connector, who peer.Identity) (*frame.Conn, stri
 		}
 		lastErr = err
 		if len(connectors) > 1 {
-			fmt.Fprintf(os.Stderr, "sshepard: connector %s: %v\n", c.Addr, err)
+			fmt.Fprintf(os.Stderr, "ssheep: connector %s: %v\n", c.Addr, err)
 		}
 	}
 	return nil, "", fmt.Errorf("no connector answered: %w", lastErr)
@@ -211,9 +211,9 @@ func (c *Client) List(timeout time.Duration) (proto.ListReply, error) {
 		sort.Slice(r.Members, func(i, j int) bool { return r.Members[i].Name < r.Members[j].Name })
 		return r, nil
 	case <-time.After(timeout):
-		return empty, errors.New("shepherd: the connector did not answer")
+		return empty, errors.New("master: the connector did not answer")
 	case <-c.closed:
-		return empty, errors.New("shepherd: lost the connector")
+		return empty, errors.New("master: lost the connector")
 	}
 }
 
@@ -387,7 +387,7 @@ func Publish(rosterPath, nodeKeyPath string) (pushed int, err error) {
 	id := flock.NodeID(key.SignPub())
 	m := roster.Find(id)
 	if m == nil {
-		return 0, errors.New("shepherd: this machine is not in the roster")
+		return 0, errors.New("master: this machine is not in the roster")
 	}
 
 	// Connecting is publishing. A connector that already knows the flock just

@@ -1,4 +1,4 @@
-// Command sshepard coordinates, controls and manages a flock of machines.
+// Command ssheep coordinates, controls and manages a flock of machines.
 //
 // One binary, one file, one key.
 package main
@@ -14,19 +14,19 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"sshepard.com/internal/connector"
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/invite"
-	"sshepard.com/internal/netx"
-	"sshepard.com/internal/peer"
-	"sshepard.com/internal/sheep"
-	"sshepard.com/internal/shepherd"
+	"ssheep.xyz/internal/connector"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/invite"
+	"ssheep.xyz/internal/master"
+	"ssheep.xyz/internal/netx"
+	"ssheep.xyz/internal/peer"
+	"ssheep.xyz/internal/sheep"
 )
 
 // version is stamped at build time.
 var version = "dev"
 
-const usage = `sshepard — one binary, one file, one key.
+const usage = `ssheep — one binary, one file, one key.
 
   init               create a new flock on this machine
   invite             mint a single-use invite for a new machine
@@ -43,11 +43,11 @@ const usage = `sshepard — one binary, one file, one key.
 
   version            print the version
 
-Run "sshepard <command> -h" for the flags of any command.`
+Run "ssheep <command> -h" for the flags of any command.`
 
 func main() {
 	log.SetFlags(0)
-	log.SetPrefix("sshepard: ")
+	log.SetPrefix("ssheep: ")
 
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, usage)
@@ -74,17 +74,17 @@ func main() {
 	case "forget":
 		err = cmdForget(args)
 	case "version", "-v", "--version":
-		fmt.Println("sshepard", version)
+		fmt.Println("ssheep", version)
 		return
 	case "help", "-h", "--help":
 		fmt.Println(usage)
 		return
 	default:
-		fmt.Fprintf(os.Stderr, "sshepard: unknown command %q\n\n%s\n", cmd, usage)
+		fmt.Fprintf(os.Stderr, "ssheep: unknown command %q\n\n%s\n", cmd, usage)
 		os.Exit(2)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sshepard: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -98,7 +98,7 @@ func newFlagSet(name string) *flag.FlagSet {
 // state resolves the three files a machine keeps, honouring --dir.
 func state(dir string) (roster, flockKey, nodeKey string) {
 	if dir != "" {
-		os.Setenv("SSHEPARD_DIR", dir)
+		os.Setenv("SSHEEP_DIR", dir)
 	}
 	return flock.DefaultRosterPath(), flock.DefaultFlockKeyPath(), flock.DefaultNodeKeyPath()
 }
@@ -111,7 +111,7 @@ func cmdInit(args []string) error {
 	fs := newFlagSet("init")
 	name := fs.String("name", "", "name of the flock (required)")
 	me := fs.String("me", "", "name for this machine (default: its hostname)")
-	dir := fs.String("dir", "", "where to keep keys and the roster (default ~/.sshepard)")
+	dir := fs.String("dir", "", "where to keep keys and the roster (default ~/.ssheep)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func cmdInit(args []string) error {
 		Members: []flock.Member{{
 			ID:      flock.NodeID(thisMachine.SignPub()),
 			Name:    machineName,
-			Role:    flock.RoleShepherd,
+			Role:    flock.RoleMaster,
 			SignKey: thisMachine.SignPub(),
 			KexKey:  kexPub,
 			Added:   now,
@@ -177,9 +177,9 @@ func cmdInit(args []string) error {
 	fmt.Printf("  authority key %s   <- keep this offline\n", flockKeyPath)
 	fmt.Printf("  this machine  %s (%s)\n\n", machineName, r.Members[0].ID)
 	fmt.Printf("next:\n")
-	fmt.Printf("  1. on an always-on machine, run:  sshepard connector --listen :7000\n")
-	fmt.Printf("  2. register it here:              sshepard connector add --addr <host:port>\n")
-	fmt.Printf("  3. add your first sheep:          sshepard invite --name pi\n")
+	fmt.Printf("  1. on an always-on machine, run:  ssheep connector --listen :7000\n")
+	fmt.Printf("  2. register it here:              ssheep connector add --addr <host:port>\n")
+	fmt.Printf("  3. add your first sheep:          ssheep invite --name pi\n")
 	fmt.Printf("\nadd a second connector early: with only one, its bad day is the flock's bad day.\n")
 	return nil
 }
@@ -191,7 +191,7 @@ func cmdInit(args []string) error {
 func cmdInvite(args []string) error {
 	fs := newFlagSet("invite")
 	name := fs.String("name", "", "name for the new machine (required)")
-	role := fs.String("role", flock.RoleSheep, "sheep or shepherd")
+	role := fs.String("role", flock.RoleSheep, "sheep or master")
 	out := fs.String("out", "", "also write the invite to this file")
 	dir := fs.String("dir", "", "where keys and the roster live")
 	if err := fs.Parse(args); err != nil {
@@ -200,14 +200,14 @@ func cmdInvite(args []string) error {
 	if *name == "" {
 		return errors.New("invite: --name is required")
 	}
-	if *role != flock.RoleSheep && *role != flock.RoleShepherd {
-		return fmt.Errorf("invite: --role must be %q or %q", flock.RoleSheep, flock.RoleShepherd)
+	if *role != flock.RoleSheep && *role != flock.RoleMaster {
+		return fmt.Errorf("invite: --role must be %q or %q", flock.RoleSheep, flock.RoleMaster)
 	}
 	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
 
 	authority, err := flock.LoadKeyFile(flockKeyPath)
 	if err != nil {
-		return fmt.Errorf("invite: %w (is this the shepherd machine?)", err)
+		return fmt.Errorf("invite: %w (is this the master machine?)", err)
 	}
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
@@ -219,8 +219,8 @@ func cmdInvite(args []string) error {
 	}
 
 	if len(r.Connectors) == 0 {
-		fmt.Fprintf(os.Stderr, "sshepard: note: this flock has no connector, so a new machine has nowhere to connect.\n")
-		fmt.Fprintf(os.Stderr, "         add one with: sshepard connector add --addr <host:port>\n")
+		fmt.Fprintf(os.Stderr, "ssheep: note: this flock has no connector, so a new machine has nowhere to connect.\n")
+		fmt.Fprintf(os.Stderr, "         add one with: ssheep connector add --addr <host:port>\n")
 	}
 
 	newMachine, err := flock.NewKeyFile()
@@ -271,13 +271,13 @@ func cmdInvite(args []string) error {
 			return err
 		}
 		fmt.Printf("wrote %s\n\n", *out)
-		fmt.Printf("copy it to the new machine, put the sshepard binary there too, then run:\n\n")
-		fmt.Printf("  sshepard sheep --invite-file %s\n\n", *out)
+		fmt.Printf("copy it to the new machine, put the ssheep binary there too, then run:\n\n")
+		fmt.Printf("  ssheep sheep --invite-file %s\n\n", *out)
 	}
 	fmt.Printf("or paste this ticket directly on the new machine:\n\n")
-	fmt.Printf("  sshepard sheep --invite '%s'\n\n", blob)
+	fmt.Printf("  ssheep sheep --invite '%s'\n\n", blob)
 	fmt.Printf("the ticket carries that machine's private key, so hand it over privately.\n")
-	fmt.Printf("undo it any time with:  sshepard forget --name %s\n", *name)
+	fmt.Printf("undo it any time with:  ssheep forget --name %s\n", *name)
 	return nil
 }
 
@@ -353,8 +353,8 @@ func cmdConnector(args []string) error {
 		fmt.Printf("this connector serves only the flock it was given. Add --public to serve any flock\n")
 		fmt.Printf("that can prove itself, which is what a community relay does.\n\n")
 	}
-	fmt.Printf("add it to the flock from the shepherd machine with:\n\n")
-	fmt.Printf("  sshepard connector add --addr %s\n\n", addr)
+	fmt.Printf("add it to the flock from the master machine with:\n\n")
+	fmt.Printf("  ssheep connector add --addr %s\n\n", addr)
 	if addr == *listen {
 		fmt.Printf("(set --advertise <host:port> if that is not the address others will use)\n\n")
 	}
@@ -432,7 +432,7 @@ func cmdConnectorAdd(args []string) error {
 
 	authority, err := flock.LoadKeyFile(flockKeyPath)
 	if err != nil {
-		return fmt.Errorf("connector add: %w (is this the shepherd machine?)", err)
+		return fmt.Errorf("connector add: %w (is this the master machine?)", err)
 	}
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
@@ -445,7 +445,7 @@ func cmdConnectorAdd(args []string) error {
 
 	p := *pin
 	if p == "auto" || p == "" {
-		fmt.Fprintf(os.Stderr, "sshepard: asking %s for its fingerprint...\n", *addr)
+		fmt.Fprintf(os.Stderr, "ssheep: asking %s for its fingerprint...\n", *addr)
 		p, err = netx.FetchPin(*addr, 10*time.Second)
 		if err != nil {
 			return fmt.Errorf("connector add: could not reach %s: %w\n  start it first, or pass --pin <fingerprint>", *addr, err)
@@ -509,7 +509,7 @@ func cmdConnectorRemove(args []string) error {
 
 	authority, err := flock.LoadKeyFile(flockKeyPath)
 	if err != nil {
-		return fmt.Errorf("connector remove: %w (is this the shepherd machine?)", err)
+		return fmt.Errorf("connector remove: %w (is this the master machine?)", err)
 	}
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
@@ -532,7 +532,7 @@ func cmdConnectorRemove(args []string) error {
 	}
 	fmt.Printf("removed connector %s — %d left\n", *addr, len(r.Connectors))
 	if len(r.Connectors) == 0 {
-		fmt.Fprintf(os.Stderr, "sshepard: warning: this flock now has no connector, so its machines have nowhere to meet.\n")
+		fmt.Fprintf(os.Stderr, "ssheep: warning: this flock now has no connector, so its machines have nowhere to meet.\n")
 	}
 	// The removed connector is no longer in the roster, so it is not among the
 	// machines we publish to. The rest still need to hear about it.
@@ -617,9 +617,9 @@ func cmdSheep(args []string) error {
 // see, run, forget
 // ---------------------------------------------------------------------------
 
-func open(dir, conn string) (*shepherd.Client, error) {
+func open(dir, conn string) (*master.Client, error) {
 	rosterPath, _, nodeKeyPath := state(dir)
-	return shepherd.Open(rosterPath, nodeKeyPath, conn)
+	return master.Open(rosterPath, nodeKeyPath, conn)
 }
 
 func cmdSee(args []string) error {
@@ -683,7 +683,7 @@ func cmdRun(args []string) error {
 	}
 	argv := fs.Args()
 	if len(argv) == 0 {
-		return errors.New("run: no command given\n\n  sshepard run --all -- uptime")
+		return errors.New("run: no command given\n\n  ssheep run --all -- uptime")
 	}
 
 	c, err := open(*dir, *conn)
@@ -719,7 +719,7 @@ func cmdForget(args []string) error {
 
 	authority, err := flock.LoadKeyFile(flockKeyPath)
 	if err != nil {
-		return fmt.Errorf("forget: %w (is this the shepherd machine?)", err)
+		return fmt.Errorf("forget: %w (is this the master machine?)", err)
 	}
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
@@ -749,11 +749,11 @@ func cmdForget(args []string) error {
 // publishRoster pushes the roster to every connector in the flock. It is not an
 // operator's job to copy the file around by hand.
 func publishRoster(rosterPath, nodeKeyPath string) {
-	pushed, err := shepherd.Publish(rosterPath, nodeKeyPath)
+	pushed, err := master.Publish(rosterPath, nodeKeyPath)
 	switch {
 	case err != nil && pushed == 0:
-		fmt.Fprintf(os.Stderr, "sshepard: could not publish the roster: %v\n", err)
-		fmt.Fprintf(os.Stderr, "sshepard: it will be picked up the next time a shepherd connects.\n")
+		fmt.Fprintf(os.Stderr, "ssheep: could not publish the roster: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ssheep: it will be picked up the next time a master connects.\n")
 	case err != nil:
 		fmt.Printf("published the roster to %d connector(s); one refused: %v\n", pushed, err)
 	case pushed > 0:

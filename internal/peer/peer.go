@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"time"
 
-	"sshepard.com/internal/flock"
-	"sshepard.com/internal/frame"
-	"sshepard.com/internal/netx"
-	"sshepard.com/internal/proto"
+	"ssheep.xyz/internal/flock"
+	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/netx"
+	"ssheep.xyz/internal/proto"
 )
 
 // Identity is who this machine is, as far as a connector is concerned.

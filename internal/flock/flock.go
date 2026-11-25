@@ -23,8 +23,8 @@ import (
 
 // Roles a member can hold.
 const (
-	RoleSheep    = "sheep"
-	RoleShepherd = "shepherd"
+	RoleSheep  = "sheep"
+	RoleMaster = "master"
 )
 
 // Connector is a reachable address book and relay.
@@ -346,14 +346,14 @@ func writeFile(path string, v any, mode os.FileMode) error {
 
 // Dir is where a machine keeps its keys and roster copy.
 func Dir() string {
-	if d := os.Getenv("SSHEPARD_DIR"); d != "" {
+	if d := os.Getenv("SSHEEP_DIR"); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".sshepard"
+		return ".ssheep"
 	}
-	return filepath.Join(home, ".sshepard")
+	return filepath.Join(home, ".ssheep")
 }
 
 // DefaultRosterPath is the machine's copy of the flock.

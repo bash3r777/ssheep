@@ -1,4 +1,4 @@
-// Package tunnel builds the end-to-end encrypted session between a shepherd and
+// Package tunnel builds the end-to-end encrypted session between a master and
 // a sheep.
 //
 // The connector forwards every byte of this, and understands none of it. Two
@@ -31,10 +31,10 @@ const (
 
 // Plaintext message kinds, which the connector never sees.
 const (
-	KindExec = "exec" // shepherd -> sheep: run this
-	KindOut  = "out"  // sheep -> shepherd: standard output
-	KindErr  = "err"  // sheep -> shepherd: standard error
-	KindExit = "exit" // sheep -> shepherd: finished
+	KindExec = "exec" // master -> sheep: run this
+	KindOut  = "out"  // sheep -> master: standard output
+	KindErr  = "err"  // sheep -> master: standard error
+	KindExit = "exit" // sheep -> master: finished
 )
 
 // Wire is the tunnel's on-the-wire message.
@@ -78,11 +78,11 @@ func transcript(context string, parts ...[]byte) []byte {
 }
 
 func sig1(initID, respID string, ephPub []byte) []byte {
-	return transcript("sshepard-kex1", []byte(initID), []byte(respID), ephPub)
+	return transcript("ssheep-kex1", []byte(initID), []byte(respID), ephPub)
 }
 
 func sig2(initID, respID string, ephInit, ephResp []byte) []byte {
-	return transcript("sshepard-kex2", []byte(initID), []byte(respID), ephInit, ephResp)
+	return transcript("ssheep-kex2", []byte(initID), []byte(respID), ephInit, ephResp)
 }
 
 // Initiate starts a session to respID.
@@ -145,7 +145,7 @@ func Respond(priv ed25519.PrivateKey, myID, peerID string, peerKey ed25519.Publi
 }
 
 func newSession(secret []byte, initID, respID string, initiator bool) (*Session, error) {
-	okm := hkdf(secret, []byte(initID+"|"+respID), []byte("sshepard-v1"), 64)
+	okm := hkdf(secret, []byte(initID+"|"+respID), []byte("ssheep-v1"), 64)
 	sendKey, recvKey := okm[:32], okm[32:]
 	if !initiator {
 		sendKey, recvKey = recvKey, sendKey
