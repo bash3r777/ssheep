@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -26,11 +27,12 @@ const handshakeTimeout = 30 * time.Second
 
 // Client is an open connection to the flock.
 type Client struct {
-	conn   *frame.Conn
-	me     string
-	name   string
-	priv   ed25519.PrivateKey
-	roster flock.Roster
+	conn      *frame.Conn
+	connector string
+	me        string
+	name      string
+	priv      ed25519.PrivateKey
+	roster    flock.Roster
 
 	mu      sync.Mutex
 	wires   map[string]*peerChan
@@ -68,42 +70,56 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 	if m.Role != flock.RoleShepherd {
 		return nil, fmt.Errorf("shepherd: this machine is enrolled as %q, and only a shepherd can issue commands", m.Role)
 	}
-	addr, pin, err := endpoint(roster, connectorAddr)
+	connectors, err := roster.ConnectorsFor(connectorAddr)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := peer.Dial(addr, pin, id, key.SignKey(), 15*time.Second)
+	conn, serving, err := dialAny(connectors, id, key.SignKey())
 	if err != nil {
 		return nil, err
 	}
 	c := &Client{
-		conn:    conn,
-		me:      id,
-		name:    m.Name,
-		priv:    key.SignKey(),
-		roster:  roster,
-		wires:   map[string]*peerChan{},
-		replies: make(chan *proto.Envelope, 4),
-		closed:  make(chan struct{}),
+		conn:      conn,
+		connector: serving,
+		me:        id,
+		name:      m.Name,
+		priv:      key.SignKey(),
+		roster:    roster,
+		wires:     map[string]*peerChan{},
+		replies:   make(chan *proto.Envelope, 4),
+		closed:    make(chan struct{}),
 	}
 	go c.readLoop()
 	return c, nil
 }
 
-func endpoint(roster flock.Roster, want string) (addr, pin string, err error) {
-	if want == "" {
-		if len(roster.Connectors) == 0 {
-			return "", "", errors.New("shepherd: this flock has no connector yet")
+// dialTimeout is deliberately short: with more than one connector, a dead one
+// must not hold up the whole command.
+const dialTimeout = 5 * time.Second
+
+// dialAny tries each connector in preference order and returns the first that
+// accepts us. Losing a connector should mean a slower first attempt, not a
+// broken flock.
+func dialAny(connectors []flock.Connector, id string, priv ed25519.PrivateKey) (*frame.Conn, string, error) {
+	var lastErr error
+	for _, c := range connectors {
+		conn, err := peer.Dial(c.Addr, c.Pin, id, priv, dialTimeout)
+		if err == nil {
+			return conn, c.Addr, nil
 		}
-		return roster.Connectors[0].Addr, roster.Connectors[0].Pin, nil
-	}
-	for _, c := range roster.Connectors {
-		if c.Addr == want {
-			return c.Addr, c.Pin, nil
+		lastErr = err
+		if len(connectors) > 1 {
+			fmt.Fprintf(os.Stderr, "sshepard: connector %s: %v\n", c.Addr, err)
 		}
 	}
-	return "", "", fmt.Errorf("shepherd: %s is not a known connector for this flock", want)
+	return nil, "", fmt.Errorf("no connector answered: %w", lastErr)
 }
+
+// Connector reports which connector this client is talking to.
+func (c *Client) Connector() string { return c.connector }
+
+// Connectors returns every connector in this flock, in preference order.
+func (c *Client) Connectors() []flock.Connector { return c.roster.Connectors }
 
 // Close ends the connection.
 func (c *Client) Close() error { return c.conn.Close() }

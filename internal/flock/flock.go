@@ -172,6 +172,54 @@ func (r *Roster) Remove(name string) bool {
 	return removed
 }
 
+// UpsertConnector adds or replaces a connector, keeping the order in which they
+// were added. The order is the preference order: members try them in turn.
+func (r *Roster) UpsertConnector(c Connector) {
+	for i := range r.Connectors {
+		if r.Connectors[i].Addr == c.Addr {
+			r.Connectors[i] = c
+			return
+		}
+	}
+	r.Connectors = append(r.Connectors, c)
+}
+
+// RemoveConnector deletes a connector by address. It reports whether anything
+// was removed.
+func (r *Roster) RemoveConnector(addr string) bool {
+	out := r.Connectors[:0]
+	removed := false
+	for _, c := range r.Connectors {
+		if c.Addr == addr {
+			removed = true
+			continue
+		}
+		out = append(out, c)
+	}
+	r.Connectors = out
+	return removed
+}
+
+// ConnectorsFor returns the connectors a member should use.
+//
+// An explicit address selects just that one; otherwise every connector in the
+// roster, in preference order. A single connector in the flock is a single
+// point of failure, which is exactly what more than one of them is for.
+func (r Roster) ConnectorsFor(want string) ([]Connector, error) {
+	if want != "" {
+		for _, c := range r.Connectors {
+			if c.Addr == want {
+				return []Connector{c}, nil
+			}
+		}
+		return nil, fmt.Errorf("flock: %s is not a connector for this flock", want)
+	}
+	if len(r.Connectors) == 0 {
+		return nil, errors.New("flock: this flock has no connector yet")
+	}
+	return r.Connectors, nil
+}
+
 // ---------------------------------------------------------------------------
 // Keys
 // ---------------------------------------------------------------------------

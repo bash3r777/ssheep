@@ -10,7 +10,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -28,15 +27,20 @@ var version = "dev"
 
 const usage = `sshepard — one binary, one file, one key.
 
-  init        create a new flock on this machine
-  invite      mint a single-use invite for a new machine
-  connector   run the address book and relay
-  pin         print the fingerprint of a running connector
-  sheep       join this machine to a flock, then serve
-  see         show the flock, live
-  run         run a command on one machine or on all of them
-  forget      revoke a machine and remove it from the roster
-  version     print the version
+  init               create a new flock on this machine
+  invite             mint a single-use invite for a new machine
+  sheep              join this machine to a flock, then serve
+  see                show the flock, live
+  run                run a command on one machine or on all of them
+  forget             revoke a machine and remove it from the roster
+
+  connector          run the address book and relay
+  connector add      register a connector with the flock
+  connector remove   forget one
+  connector list     show them, and whether they answer
+  pin                print the fingerprint of a running connector
+
+  version            print the version
 
 Run "sshepard <command> -h" for the flags of any command.`
 
@@ -173,8 +177,9 @@ func cmdInit(args []string) error {
 	fmt.Printf("  this machine  %s (%s)\n\n", machineName, r.Members[0].ID)
 	fmt.Printf("next:\n")
 	fmt.Printf("  1. on an always-on machine, run:  sshepard connector --listen :7000\n")
-	fmt.Printf("  2. add it here:                   sshepard invite --name <machine> --connector <addr> --pin <fingerprint>\n")
+	fmt.Printf("  2. register it here:              sshepard connector add --addr <host:port>\n")
 	fmt.Printf("  3. add your first sheep:          sshepard invite --name pi\n")
+	fmt.Printf("\nadd a second connector early: with only one, its bad day is the flock's bad day.\n")
 	return nil
 }
 
@@ -223,7 +228,7 @@ func cmdInvite(args []string) error {
 				return fmt.Errorf("invite: could not read the connector's fingerprint: %w", err)
 			}
 		}
-		upsertConnector(&r, flock.Connector{Addr: *connAddr, Pin: pin})
+		r.UpsertConnector(flock.Connector{Addr: *connAddr, Pin: pin})
 		fmt.Printf("using connector %s (%s)\n", *connAddr, short(pin))
 	} else if len(r.Connectors) == 0 {
 		fmt.Fprintf(os.Stderr, "sshepard: note: this flock has no connector, so a new machine has nowhere to connect.\n")
@@ -288,17 +293,6 @@ func cmdInvite(args []string) error {
 	return nil
 }
 
-func upsertConnector(r *flock.Roster, c flock.Connector) {
-	for i := range r.Connectors {
-		if r.Connectors[i].Addr == c.Addr {
-			r.Connectors[i] = c
-			return
-		}
-	}
-	r.Connectors = append(r.Connectors, c)
-	sort.Slice(r.Connectors, func(i, j int) bool { return r.Connectors[i].Addr < r.Connectors[j].Addr })
-}
-
 func short(pin string) string {
 	if len(pin) <= 16 {
 		return pin
@@ -311,6 +305,16 @@ func short(pin string) string {
 // ---------------------------------------------------------------------------
 
 func cmdConnector(args []string) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "add":
+			return cmdConnectorAdd(args[1:])
+		case "remove":
+			return cmdConnectorRemove(args[1:])
+		case "list":
+			return cmdConnectorList(args[1:])
+		}
+	}
 	fs := newFlagSet("connector")
 	listen := fs.String("listen", ":7000", "address to listen on")
 	advertise := fs.String("advertise", "", "address others should use to reach this connector (default: as --listen)")
@@ -402,6 +406,152 @@ func cmdPin(args []string) error {
 	return nil
 }
 
+// cmdConnectorAdd registers a connector in the flock and publishes the roster.
+//
+// More than one connector is not redundancy for its own sake: with a single one,
+// that machine's bad afternoon is the flock's bad afternoon.
+func cmdConnectorAdd(args []string) error {
+	fs := newFlagSet("connector add")
+	addr := fs.String("addr", "", "the connector's address, host:port (required)")
+	pin := fs.String("pin", "auto", `its fingerprint, or "auto" to read it from the connector`)
+	dir := fs.String("dir", "", "where keys and the roster live")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *addr == "" {
+		return errors.New("connector add: --addr is required")
+	}
+	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
+
+	authority, err := flock.LoadKeyFile(flockKeyPath)
+	if err != nil {
+		return fmt.Errorf("connector add: %w (is this the shepherd machine?)", err)
+	}
+	sr, err := flock.LoadSignedRoster(rosterPath)
+	if err != nil {
+		return err
+	}
+	r, err := sr.Verify()
+	if err != nil {
+		return err
+	}
+
+	p := *pin
+	if p == "auto" || p == "" {
+		fmt.Fprintf(os.Stderr, "sshepard: asking %s for its fingerprint...\n", *addr)
+		p, err = netx.FetchPin(*addr, 10*time.Second)
+		if err != nil {
+			return fmt.Errorf("connector add: could not reach %s: %w\n  start it first, or pass --pin <fingerprint>", *addr, err)
+		}
+	}
+
+	replacing := false
+	for _, c := range r.Connectors {
+		if c.Addr == *addr {
+			replacing = true
+		}
+	}
+	r.UpsertConnector(flock.Connector{Addr: *addr, Pin: p})
+	r = r.Bump()
+	sr, err = flock.SignRoster(r, authority.SignKey())
+	if err != nil {
+		return err
+	}
+	if err := sr.Save(rosterPath); err != nil {
+		return err
+	}
+	if replacing {
+		fmt.Printf("updated connector %s (%s)\n", *addr, short(p))
+	} else {
+		fmt.Printf("added connector %s (%s) — the flock now has %d\n", *addr, short(p), len(r.Connectors))
+	}
+	publishRoster(rosterPath, nodeKeyPath)
+	return nil
+}
+
+func cmdConnectorRemove(args []string) error {
+	fs := newFlagSet("connector remove")
+	addr := fs.String("addr", "", "the connector's address (required)")
+	dir := fs.String("dir", "", "where keys and the roster live")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *addr == "" {
+		return errors.New("connector remove: --addr is required")
+	}
+	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
+
+	authority, err := flock.LoadKeyFile(flockKeyPath)
+	if err != nil {
+		return fmt.Errorf("connector remove: %w (is this the shepherd machine?)", err)
+	}
+	sr, err := flock.LoadSignedRoster(rosterPath)
+	if err != nil {
+		return err
+	}
+	r, err := sr.Verify()
+	if err != nil {
+		return err
+	}
+	if !r.RemoveConnector(*addr) {
+		return fmt.Errorf("connector remove: %s is not a connector for this flock", *addr)
+	}
+	r = r.Bump()
+	sr, err = flock.SignRoster(r, authority.SignKey())
+	if err != nil {
+		return err
+	}
+	if err := sr.Save(rosterPath); err != nil {
+		return err
+	}
+	fmt.Printf("removed connector %s — %d left\n", *addr, len(r.Connectors))
+	if len(r.Connectors) == 0 {
+		fmt.Fprintf(os.Stderr, "sshepard: warning: this flock now has no connector, so its machines have nowhere to meet.\n")
+	}
+	// The removed connector is no longer in the roster, so it is not among the
+	// machines we publish to. The rest still need to hear about it.
+	publishRoster(rosterPath, nodeKeyPath)
+	return nil
+}
+
+func cmdConnectorList(args []string) error {
+	fs := newFlagSet("connector list")
+	dir := fs.String("dir", "", "where keys and the roster live")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rosterPath, _, _ := state(*dir)
+	sr, err := flock.LoadSignedRoster(rosterPath)
+	if err != nil {
+		return err
+	}
+	r, err := sr.Verify()
+	if err != nil {
+		return err
+	}
+	if len(r.Connectors) == 0 {
+		fmt.Println("this flock has no connector, so its machines have nowhere to meet")
+		return nil
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "ADDRESS\tSTATUS\tFINGERPRINT")
+	for _, c := range r.Connectors {
+		status := "unreachable"
+		if got, err := netx.FetchPin(c.Addr, 3*time.Second); err == nil {
+			switch got {
+			case c.Pin:
+				status = "up"
+			default:
+				status = "FINGERPRINT CHANGED"
+			}
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\n", c.Addr, status, short(c.Pin))
+	}
+	_ = w.Flush()
+	fmt.Printf("\nmachines try these in order, so the first is the preferred one\n")
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // sheep
 // ---------------------------------------------------------------------------
@@ -478,6 +628,9 @@ func cmdSee(args []string) error {
 		return err
 	}
 	fmt.Printf("\n%d of %d machines online\n", online, len(members))
+	if n := len(c.Connectors()); n > 1 {
+		fmt.Printf("via %s (of %d connectors)\n", c.Connector(), n)
+	}
 	return nil
 }
 

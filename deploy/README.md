@@ -25,17 +25,21 @@ journalctl -u sshepard-connector | grep -i fingerprint
 ```
 
 The connector generates its TLS certificate on first start and prints its
-fingerprint. Register that in the flock, so every machine knows where to look
-and which certificate to trust:
+fingerprint. Register it from the shepherd machine — this reads the fingerprint
+from the connector itself and publishes the roster, so nothing needs copying by
+hand:
 
 ```sh
-# on the shepherd machine
-sshepard invite --name <machine> --connector <host:port> --pin <fingerprint>
+sshepard connector add --addr <host:port>
+sshepard connector list
 ```
 
-`invite` and `forget` publish the new roster to every connector in the flock, so
-there is nothing to copy by hand afterwards. A connector adopts a roster only
-when it verifies and is signed by the flock key it already trusts.
+A connector adopts a roster only when it verifies and is signed by the flock key
+it already trusts.
+
+**Run more than one.** Two connectors on different networks turn a bad afternoon
+into a non-event; every sheep holds a link to each of them, and a shepherd falls
+through the list. `connector add` twice is the whole procedure.
 
 Because the connector is blind, it is the least valuable machine in the flock.
 If it is compromised, the attacker learns who talks to whom and nothing else. If

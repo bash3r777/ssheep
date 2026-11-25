@@ -109,6 +109,31 @@ revocation instant in a peer-to-peer network is a hard problem, and for now the
 answer is that the connector is the chokepoint, so revoking works for as long as
 the connector is in the path.
 
+## More than one connector
+
+A single connector is a single point of failure: its bad afternoon becomes the
+flock's, which is a strange thing for a design whose whole point is not needing
+anyone. So a flock lists as many as it likes.
+
+- **Every sheep connects to all of them** and holds each link open. If one goes
+  down the sheep logs it, backs off, and rejoins when it comes back. Losing a
+  connector costs the flock nothing.
+- **A shepherd tries them in roster order** and uses the first that answers, so
+  the order *is* the preference order. A dead connector costs five seconds, not
+  a broken command.
+- **Sessions are per link.** A shepherd reaching a sheep through one connector is
+  a different conversation from the same shepherd reaching it through another,
+  because the two paths have nothing to do with each other.
+
+`sshepard connector add --addr <host:port>` reads the fingerprint from the
+connector itself, rewrites the roster and publishes it. `connector list` probes
+each one and reports whether it answers — and whether its fingerprint has
+*changed*, which is the one failure that should never pass silently.
+
+Adding connectors makes the flock harder to take down. It does not make it
+faster and it does not make it more private — it just means no single machine
+can end it.
+
 ## Deliberate omissions
 
 - **Direct connections.** Today every byte goes through the connector. IPv6,

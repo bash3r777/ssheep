@@ -188,3 +188,69 @@ func TestRosterRemove(t *testing.T) {
 		t.Fatal("Remove reported a second removal")
 	}
 }
+
+func TestConnectorsKeepTheirPreferenceOrder(t *testing.T) {
+	var r Roster
+	r.UpsertConnector(Connector{Addr: "first:7000", Pin: "aaa"})
+	r.UpsertConnector(Connector{Addr: "second:7000", Pin: "bbb"})
+	r.UpsertConnector(Connector{Addr: "third:7000", Pin: "ccc"})
+
+	got, err := r.ConnectorsFor("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"first:7000", "second:7000", "third:7000"}
+	for i, c := range got {
+		if c.Addr != want[i] {
+			t.Fatalf("position %d = %q, want %q: the order is the preference order", i, c.Addr, want[i])
+		}
+	}
+
+	// Updating an existing connector in place must not move it to the end.
+	r.UpsertConnector(Connector{Addr: "first:7000", Pin: "changed"})
+	got, _ = r.ConnectorsFor("")
+	if got[0].Addr != "first:7000" || got[0].Pin != "changed" {
+		t.Fatalf("re-registering a connector moved or failed to update it: %+v", got[0])
+	}
+	if len(r.Connectors) != 3 {
+		t.Fatalf("re-registering added a duplicate: %d connectors", len(r.Connectors))
+	}
+}
+
+func TestConnectorsSelection(t *testing.T) {
+	var r Roster
+	r.UpsertConnector(Connector{Addr: "a:7000", Pin: "aaa"})
+	r.UpsertConnector(Connector{Addr: "b:7000", Pin: "bbb"})
+
+	one, err := r.ConnectorsFor("b:7000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(one) != 1 || one[0].Addr != "b:7000" {
+		t.Fatalf("explicit selection returned %+v", one)
+	}
+	if _, err := r.ConnectorsFor("nope:7000"); err == nil {
+		t.Fatal("an unknown connector address was accepted")
+	}
+
+	var none Roster
+	if _, err := none.ConnectorsFor(""); err == nil {
+		t.Fatal("a flock with no connectors was accepted")
+	}
+}
+
+func TestRemoveConnector(t *testing.T) {
+	var r Roster
+	r.UpsertConnector(Connector{Addr: "a:7000", Pin: "aaa"})
+	r.UpsertConnector(Connector{Addr: "b:7000", Pin: "bbb"})
+
+	if !r.RemoveConnector("a:7000") {
+		t.Fatal("RemoveConnector reported nothing removed")
+	}
+	if len(r.Connectors) != 1 || r.Connectors[0].Addr != "b:7000" {
+		t.Fatalf("connectors after removal: %+v", r.Connectors)
+	}
+	if r.RemoveConnector("a:7000") {
+		t.Fatal("RemoveConnector reported a second removal")
+	}
+}

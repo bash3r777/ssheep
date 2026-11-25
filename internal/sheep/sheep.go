@@ -2,7 +2,12 @@
 //
 // A sheep only ever dials out. It holds its own private key, a copy of the
 // roster, and nothing else. Commands arrive already encrypted for it, so the
-// connector in the middle cannot read, change or forge them.
+// connectors in the middle cannot read, change or forge them.
+//
+// A sheep connects to every connector in the flock at once. That is what makes
+// more than one connector worth having: the flock survives any one of them
+// dying, and a shepherd can reach this machine through whichever one it is
+// talking to.
 package sheep
 
 import (
@@ -27,6 +32,10 @@ import (
 	"sshepard.com/internal/tunnel"
 )
 
+// errRevoked means the flock no longer contains this machine. Retrying will not
+// help, so the agent stops rather than hammering the connector.
+var errRevoked = errors.New("sheep: this machine is no longer in the flock")
+
 // Install unpacks an invite onto this machine. It refuses to overwrite an
 // existing identity, so running it twice cannot silently re-key a machine.
 func Install(rosterPath, nodeKeyPath, source string) error {
@@ -44,13 +53,10 @@ func Install(rosterPath, nodeKeyPath, source string) error {
 	if err := key.Save(nodeKeyPath); err != nil {
 		return err
 	}
-	if err := in.Roster.Save(rosterPath); err != nil {
-		return err
-	}
-	return nil
+	return in.Roster.Save(rosterPath)
 }
 
-// Run joins the flock and serves until the connection ends.
+// Run joins the flock and serves until the process is stopped.
 func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
@@ -69,39 +75,31 @@ func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 	if m == nil {
 		return errors.New("sheep: this machine is not in the roster")
 	}
-	addr, pin, err := endpoint(roster, connectorAddr)
+	connectors, err := roster.ConnectorsFor(connectorAddr)
 	if err != nil {
 		return err
 	}
-	conn, err := peer.Dial(addr, pin, id, key.SignKey(), 15*time.Second)
-	if err != nil {
-		return err
-	}
-	a := &Agent{
-		id:       id,
-		name:     m.Name,
-		key:      key,
-		roster:   roster,
-		conn:     conn,
-		sessions: map[string]*tunnel.Session{},
-	}
-	log.Printf("sheep: joined %q as %s (%s)", roster.Name, a.name, a.id)
-	return a.serve()
-}
 
-func endpoint(roster flock.Roster, want string) (addr, pin string, err error) {
-	if want == "" {
-		if len(roster.Connectors) == 0 {
-			return "", "", errors.New("sheep: this flock has no connector yet")
-		}
-		return roster.Connectors[0].Addr, roster.Connectors[0].Pin, nil
+	a := &Agent{id: id, name: m.Name, key: key, roster: roster, stop: make(chan struct{})}
+	log.Printf("sheep: %s (%s) in flock %q, %d connector(s)", a.name, a.id, roster.Name, len(connectors))
+
+	var wg sync.WaitGroup
+	for _, c := range connectors {
+		wg.Add(1)
+		go func(c flock.Connector) {
+			defer wg.Done()
+			a.follow(c)
+		}(c)
 	}
-	for _, c := range roster.Connectors {
-		if c.Addr == want {
-			return c.Addr, c.Pin, nil
-		}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+
+	select {
+	case <-a.stop:
+		return errors.New(a.haltReason)
+	case <-done:
+		return nil
 	}
-	return "", "", fmt.Errorf("sheep: %s is not a known connector for this flock", want)
 }
 
 // Agent is a joined machine.
@@ -109,13 +107,21 @@ type Agent struct {
 	id   string
 	name string
 	key  *flock.KeyFile
-	conn *frame.Conn
 
 	rmu    sync.RWMutex
 	roster flock.Roster
 
-	mu       sync.Mutex
-	sessions map[string]*tunnel.Session
+	stopOnce   sync.Once
+	stop       chan struct{}
+	haltReason string
+}
+
+// halt stops every connector link for good, and records why.
+func (a *Agent) halt(reason string) {
+	a.stopOnce.Do(func() {
+		a.haltReason = reason
+		close(a.stop)
+	})
 }
 
 func (a *Agent) currentRoster() flock.Roster {
@@ -136,14 +142,60 @@ func (a *Agent) member(id string) *flock.Member {
 	return a.roster.Find(id)
 }
 
-func (a *Agent) serve() error {
-	// Ask for the current roster straight away: a machine that joined earlier
-	// may have been revoked, or the flock may have grown since the invite.
-	if err := peer.Send(a.conn, proto.Wrap(proto.TypeRoster, nil)); err != nil {
+// follow keeps one connector link alive, backing off if the connector is down.
+func (a *Agent) follow(c flock.Connector) {
+	const maxBackoff = 30 * time.Second
+	backoff := 2 * time.Second
+	for {
+		started := time.Now()
+		err := a.serveConnector(c)
+
+		if err != nil {
+			if errors.Is(err, errRevoked) {
+				a.halt(fmt.Sprintf("sheep: %s refused this machine: %v", c.Addr, err))
+				return
+			}
+			if time.Since(started) > maxBackoff {
+				backoff = 2 * time.Second // it was healthy for a while; start over
+			}
+			log.Printf("sheep: connector %s: %v (retrying in %s)", c.Addr, err, backoff)
+		}
+
+		select {
+		case <-a.stop:
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < maxBackoff {
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
+	}
+}
+
+// serveConnector holds one connection until it breaks.
+func (a *Agent) serveConnector(c flock.Connector) error {
+	conn, err := peer.Dial(c.Addr, c.Pin, a.id, a.key.SignKey(), 15*time.Second)
+	if err != nil {
+		if strings.Contains(err.Error(), "roster") || strings.Contains(err.Error(), "not in the") {
+			return fmt.Errorf("%w (%v)", errRevoked, err)
+		}
+		return err
+	}
+	defer conn.Close()
+
+	l := &link{addr: c.Addr, conn: conn, sessions: map[string]*tunnel.Session{}}
+	log.Printf("sheep: connected to %s", c.Addr)
+
+	// Ask for the current roster: the flock may have grown or shrunk since the
+	// invite was minted.
+	if err := peer.Send(conn, proto.Wrap(proto.TypeRoster, nil)); err != nil {
 		return err
 	}
 	for {
-		env, err := peer.Read(a.conn)
+		env, err := peer.Read(conn)
 		if err != nil {
 			return err
 		}
@@ -153,16 +205,16 @@ func (a *Agent) serve() error {
 			if err := env.Decode(&d); err != nil {
 				continue
 			}
-			a.handle(d.From, d.Payload)
+			a.handle(l, d.From, d.Payload)
 		case proto.TypeRoster:
 			a.adoptRoster(env)
 		case proto.TypeError:
 			var e proto.ErrMsg
 			_ = env.Decode(&e)
-			log.Printf("sheep: connector: %s", e.Message)
 			if strings.Contains(e.Message, "roster") {
-				return errors.New("sheep: this machine is no longer in the flock")
+				return fmt.Errorf("%w (%s)", errRevoked, e.Message)
 			}
+			log.Printf("sheep: connector %s: %s", c.Addr, e.Message)
 		}
 	}
 }
@@ -185,7 +237,30 @@ func (a *Agent) adoptRoster(env *proto.Envelope) {
 	a.setRoster(r)
 }
 
-func (a *Agent) handle(from string, payload []byte) {
+// link is one live connection to one connector. Sessions live here rather than
+// on the agent, because a shepherd reaching us through connector A is a
+// different conversation from the same shepherd reaching us through connector B.
+type link struct {
+	addr string
+	conn *frame.Conn
+
+	mu       sync.Mutex
+	sessions map[string]*tunnel.Session
+}
+
+func (l *link) setSession(id string, s *tunnel.Session) {
+	l.mu.Lock()
+	l.sessions[id] = s
+	l.mu.Unlock()
+}
+
+func (l *link) session(id string) *tunnel.Session {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.sessions[id]
+}
+
+func (a *Agent) handle(l *link, from string, payload []byte) {
 	w, err := tunnel.ParseWire(payload)
 	if err != nil {
 		return
@@ -202,11 +277,11 @@ func (a *Agent) handle(from string, payload []byte) {
 			log.Printf("sheep: handshake with %s failed: %v", from, err)
 			return
 		}
-		a.setSession(from, sess)
-		a.sendWire(from, reply)
+		l.setSession(from, sess)
+		a.sendWire(l, from, reply)
 
 	case tunnel.KindEnc:
-		sess := a.session(from)
+		sess := l.session(from)
 		if sess == nil {
 			return
 		}
@@ -220,30 +295,30 @@ func (a *Agent) handle(from string, payload []byte) {
 			return
 		}
 		if msg.Kind == tunnel.KindExec {
-			go a.exec(from, sess, msg.Argv)
+			go a.exec(l, from, sess, msg.Argv)
 		}
 	}
 }
 
-// exec runs a command and streams its output back to the shepherd.
-func (a *Agent) exec(from string, sess *tunnel.Session, argv []string) {
+// exec runs a command and streams its output back over the link it arrived on.
+func (a *Agent) exec(l *link, from string, sess *tunnel.Session, argv []string) {
 	if len(argv) == 0 {
-		a.sendMsg(from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: "no command given"})
+		a.sendMsg(l, from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: "no command given"})
 		return
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		a.sendMsg(from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: err.Error()})
+		a.sendMsg(l, from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: err.Error()})
 		return
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		a.sendMsg(from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: err.Error()})
+		a.sendMsg(l, from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: err.Error()})
 		return
 	}
 	if err := cmd.Start(); err != nil {
-		a.sendMsg(from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: err.Error()})
+		a.sendMsg(l, from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: -1, Err: err.Error()})
 		return
 	}
 
@@ -254,7 +329,7 @@ func (a *Agent) exec(from string, sess *tunnel.Session, argv []string) {
 		for {
 			n, err := r.Read(buf)
 			if n > 0 {
-				a.sendMsg(from, sess, &tunnel.Msg{Kind: kind, Data: append([]byte(nil), buf[:n]...)})
+				a.sendMsg(l, from, sess, &tunnel.Msg{Kind: kind, Data: append([]byte(nil), buf[:n]...)})
 			}
 			if err != nil {
 				return
@@ -277,10 +352,10 @@ func (a *Agent) exec(from string, sess *tunnel.Session, argv []string) {
 			errText = err.Error()
 		}
 	}
-	a.sendMsg(from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: code, Err: errText})
+	a.sendMsg(l, from, sess, &tunnel.Msg{Kind: tunnel.KindExit, Code: code, Err: errText})
 }
 
-func (a *Agent) sendMsg(to string, sess *tunnel.Session, msg *tunnel.Msg) {
+func (a *Agent) sendMsg(l *link, to string, sess *tunnel.Session, msg *tunnel.Msg) {
 	plain, err := tunnel.MarshalMsg(msg)
 	if err != nil {
 		return
@@ -289,27 +364,15 @@ func (a *Agent) sendMsg(to string, sess *tunnel.Session, msg *tunnel.Msg) {
 	if err != nil {
 		return
 	}
-	a.sendWire(to, &tunnel.Wire{Kind: tunnel.KindEnc, CT: ct})
+	a.sendWire(l, to, &tunnel.Wire{Kind: tunnel.KindEnc, CT: ct})
 }
 
-func (a *Agent) sendWire(to string, w *tunnel.Wire) {
+func (a *Agent) sendWire(l *link, to string, w *tunnel.Wire) {
 	raw, err := tunnel.MarshalWire(w)
 	if err != nil {
 		return
 	}
-	if err := peer.Send(a.conn, peer.RouteTo(to, raw)); err != nil {
-		log.Printf("sheep: could not reach the connector: %v", err)
+	if err := peer.Send(l.conn, peer.RouteTo(to, raw)); err != nil {
+		log.Printf("sheep: connector %s: %v", l.addr, err)
 	}
-}
-
-func (a *Agent) setSession(id string, s *tunnel.Session) {
-	a.mu.Lock()
-	a.sessions[id] = s
-	a.mu.Unlock()
-}
-
-func (a *Agent) session(id string) *tunnel.Session {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.sessions[id]
 }

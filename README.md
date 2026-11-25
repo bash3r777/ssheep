@@ -33,14 +33,17 @@ as a connector, so a flock with no VPS is possible.
 - Every member has its own key. Private keys never leave the machine they belong to.
 - Peers verify each other directly, so a compromised connector cannot impersonate anyone.
 
-## Five verbs
+## The verbs
 
 ```
-sshepard init       create a flock
-sshepard invite     mint a single-use invite for a new machine
-sshepard see        show the flock, live
-sshepard run        run a command on one machine or all of them
-sshepard forget     revoke a machine
+sshepard init               create a flock
+sshepard connector          run an address book and relay
+sshepard connector add      register a connector with the flock
+sshepard connector list     show them, and whether they answer
+sshepard invite             mint a single-use invite for a new machine
+sshepard see                show the flock, live
+sshepard run                run a command on one machine or all of them
+sshepard forget             revoke a machine
 ```
 
 ## Quick start
@@ -49,26 +52,39 @@ sshepard forget     revoke a machine
 # On the machine that will be your shepherd
 sshepard init --name myflock
 
-# On the machine that will be reachable from everywhere
+# On a machine that is reachable from everywhere
 sshepard connector --listen :7000
-#   -> prints a pin; add it:  sshepard invite ... see docs/ARCHITECTURE.md
+
+# Register it. This reads its fingerprint from the connector itself, and
+# publishes the roster so the connector knows the flock.
+sshepard connector add --addr <that machine>:7000
 
 # Add a machine
-sshepard invite --name pi
-#   -> prints a one-liner to paste on the new machine
+sshepard invite --name pi --out pi.ticket
+#   copy pi.ticket and the binary across, then on the new machine:
+#   sshepard sheep --invite-file pi.ticket --install-only
 
 # Use it
 sshepard see
 sshepard run --name pi -- uptime
 ```
 
+Add a second connector early. With only one, its bad day is the flock's bad
+day — every machine tries the connectors in order and survives losing any of
+them.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it works underneath.
 
 ## Status
 
-Early. Phase 0/1 of the plan: identity, invites, the connector, the relay path and
-`run`. Direct connections (IPv6, UPnP, hole punching) and relay election come next;
-they are optimisations on top of a working relay, never a replacement for it.
+Early, but working end to end: identity, invites, connectors, the relay path,
+`see`, `run` on one machine or all of them, revocation, and failover across
+more than one connector.
+
+Next: multi-flock connectors (so one relay can serve several flocks) and the
+public relay pool, so a new user with no public IP anywhere can still join.
+Direct connections — IPv6, UPnP, hole punching — sit on top of the relay rather
+than replacing it: the relay stays as the fallback that always works.
 
 ## License
 
