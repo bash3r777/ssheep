@@ -17,10 +17,10 @@ import (
 	"ssheep.xyz/internal/connector"
 	"ssheep.xyz/internal/flock"
 	"ssheep.xyz/internal/invite"
-	"ssheep.xyz/internal/master"
 	"ssheep.xyz/internal/netx"
 	"ssheep.xyz/internal/peer"
 	"ssheep.xyz/internal/sheep"
+	"ssheep.xyz/internal/master"
 )
 
 // version is stamped at build time.

@@ -23,7 +23,7 @@ import (
 
 // Roles a member can hold.
 const (
-	RoleSheep  = "sheep"
+	RoleSheep    = "sheep"
 	RoleMaster = "master"
 )
 
