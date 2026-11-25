@@ -8,15 +8,16 @@ import "encoding/json"
 
 // Envelope types.
 const (
-	TypeChallenge = "challenge" // connector -> peer: prove you own your key
-	TypeAuth      = "auth"      // peer -> connector: signed challenge
-	TypeReady     = "ready"     // connector -> peer: you are in
-	TypeList      = "list"      // peer -> connector: who is there?
-	TypeListReply = "listreply" // connector -> peer: the flock, with presence
-	TypeRoute     = "route"     // peer -> connector: deliver this to someone
-	TypeData      = "data"      // connector -> peer: someone sent you this
-	TypeRoster    = "roster"    // connector -> peer: the current signed roster
-	TypeError     = "error"
+	TypeChallenge  = "challenge"  // connector -> peer: prove you own your key
+	TypeAuth       = "auth"       // peer -> connector: signed challenge
+	TypeReady      = "ready"      // connector -> peer: you are in
+	TypeList       = "list"       // peer -> connector: who is there?
+	TypeListReply  = "listreply"  // connector -> peer: the flock, with presence
+	TypeRoute      = "route"      // peer -> connector: deliver this to someone
+	TypeData       = "data"       // connector -> peer: someone sent you this
+	TypeRoster     = "roster"     // connector -> peer: the current signed roster
+	TypeRosterPush = "rosterpush" // shepherd -> connector: adopt this roster
+	TypeError      = "error"
 )
 
 // AuthContext prefixes every authentication signature so a signature made for

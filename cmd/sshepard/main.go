@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -198,7 +199,7 @@ func cmdInvite(args []string) error {
 	if *role != flock.RoleSheep && *role != flock.RoleShepherd {
 		return fmt.Errorf("invite: --role must be %q or %q", flock.RoleSheep, flock.RoleShepherd)
 	}
-	rosterPath, flockKeyPath, _ := state(*dir)
+	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
 
 	authority, err := flock.LoadKeyFile(flockKeyPath)
 	if err != nil {
@@ -255,6 +256,7 @@ func cmdInvite(args []string) error {
 	if err := sr.Save(rosterPath); err != nil {
 		return err
 	}
+	publishRoster(rosterPath, nodeKeyPath)
 
 	in := &invite.Invite{
 		Version:  invite.Version,
@@ -337,12 +339,50 @@ func cmdConnector(args []string) error {
 	}
 	addr := *advertise
 	if addr == "" {
-		addr = *listen
+		addr = advertiseAddr(*listen)
 	}
 	fmt.Printf("this connector's fingerprint:\n\n  %s\n\n", srv.Pin())
 	fmt.Printf("add it to the flock from the shepherd machine with:\n\n")
 	fmt.Printf("  sshepard invite --name <machine> --connector %s --pin %s\n\n", addr, srv.Pin())
+	if addr == *listen {
+		fmt.Printf("(set --advertise <host:port> if that is not the address others will use)\n\n")
+	}
 	return srv.ListenAndServe(*listen)
+}
+
+// advertiseAddr turns a listen address into something a remote machine could
+// actually dial, so a fresh connector does not print ":7000" and leave the
+// operator guessing.
+func advertiseAddr(listen string) string {
+	host, port, err := net.SplitHostPort(listen)
+	if err != nil {
+		return listen
+	}
+	if host != "" && host != "0.0.0.0" && host != "::" {
+		return listen
+	}
+	if ip := firstRoutableIP(); ip != "" {
+		return net.JoinHostPort(ip, port)
+	}
+	if h, err := os.Hostname(); err == nil {
+		return net.JoinHostPort(h, port)
+	}
+	return listen
+}
+
+func firstRoutableIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() || ipnet.IP.To4() == nil {
+			continue
+		}
+		return ipnet.IP.String()
+	}
+	return ""
 }
 
 func cmdPin(args []string) error {
@@ -493,7 +533,7 @@ func cmdForget(args []string) error {
 	if *name == "" {
 		return errors.New("forget: --name is required")
 	}
-	rosterPath, flockKeyPath, _ := state(*dir)
+	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
 
 	authority, err := flock.LoadKeyFile(flockKeyPath)
 	if err != nil {
@@ -518,7 +558,23 @@ func cmdForget(args []string) error {
 	if err := sr.Save(rosterPath); err != nil {
 		return err
 	}
+	publishRoster(rosterPath, nodeKeyPath)
 	fmt.Printf("removed %q from the flock (roster is now version %d)\n", *name, r.Version)
-	fmt.Printf("the connector will refuse it within a couple of seconds of seeing the new roster.\n")
+	fmt.Printf("every connector will drop it within a couple of seconds.\n")
 	return nil
+}
+
+// publishRoster pushes the roster to every connector in the flock. It is not an
+// operator's job to copy the file around by hand.
+func publishRoster(rosterPath, nodeKeyPath string) {
+	pushed, err := shepherd.Publish(rosterPath, nodeKeyPath)
+	switch {
+	case err != nil && pushed == 0:
+		fmt.Fprintf(os.Stderr, "sshepard: could not publish the roster: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sshepard: it will be picked up the next time a shepherd connects.\n")
+	case err != nil:
+		fmt.Printf("published the roster to %d connector(s); one refused: %v\n", pushed, err)
+	case pushed > 0:
+		fmt.Printf("published the roster to %d connector(s)\n", pushed)
+	}
 }

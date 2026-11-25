@@ -6,7 +6,9 @@
 package sheep
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -104,17 +106,42 @@ func endpoint(roster flock.Roster, want string) (addr, pin string, err error) {
 
 // Agent is a joined machine.
 type Agent struct {
-	id     string
-	name   string
-	key    *flock.KeyFile
+	id   string
+	name string
+	key  *flock.KeyFile
+	conn *frame.Conn
+
+	rmu    sync.RWMutex
 	roster flock.Roster
-	conn   *frame.Conn
 
 	mu       sync.Mutex
 	sessions map[string]*tunnel.Session
 }
 
+func (a *Agent) currentRoster() flock.Roster {
+	a.rmu.RLock()
+	defer a.rmu.RUnlock()
+	return a.roster
+}
+
+func (a *Agent) setRoster(r flock.Roster) {
+	a.rmu.Lock()
+	a.roster = r
+	a.rmu.Unlock()
+}
+
+func (a *Agent) member(id string) *flock.Member {
+	a.rmu.RLock()
+	defer a.rmu.RUnlock()
+	return a.roster.Find(id)
+}
+
 func (a *Agent) serve() error {
+	// Ask for the current roster straight away: a machine that joined earlier
+	// may have been revoked, or the flock may have grown since the invite.
+	if err := peer.Send(a.conn, proto.Wrap(proto.TypeRoster, nil)); err != nil {
+		return err
+	}
 	for {
 		env, err := peer.Read(a.conn)
 		if err != nil {
@@ -127,6 +154,8 @@ func (a *Agent) serve() error {
 				continue
 			}
 			a.handle(d.From, d.Payload)
+		case proto.TypeRoster:
+			a.adoptRoster(env)
 		case proto.TypeError:
 			var e proto.ErrMsg
 			_ = env.Decode(&e)
@@ -138,6 +167,24 @@ func (a *Agent) serve() error {
 	}
 }
 
+// adoptRoster accepts a newer roster, but only a well-signed one for this flock.
+func (a *Agent) adoptRoster(env *proto.Envelope) {
+	var sr flock.SignedRoster
+	if err := json.Unmarshal(env.Body, &sr); err != nil {
+		return
+	}
+	r, err := sr.Verify()
+	if err != nil {
+		log.Printf("sheep: ignoring a roster that does not verify: %v", err)
+		return
+	}
+	if cur := a.currentRoster(); !bytes.Equal(cur.FlockKey, r.FlockKey) {
+		log.Printf("sheep: ignoring a roster signed by a different flock")
+		return
+	}
+	a.setRoster(r)
+}
+
 func (a *Agent) handle(from string, payload []byte) {
 	w, err := tunnel.ParseWire(payload)
 	if err != nil {
@@ -145,7 +192,7 @@ func (a *Agent) handle(from string, payload []byte) {
 	}
 	switch w.Kind {
 	case tunnel.KindKex1:
-		m := a.roster.Find(from)
+		m := a.member(from)
 		if m == nil || m.Role != flock.RoleShepherd {
 			log.Printf("sheep: refusing a handshake from %s (not a shepherd)", from)
 			return

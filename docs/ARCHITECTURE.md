@@ -58,6 +58,8 @@ It can:
 
 - verify that a connecting machine holds the key the roster says it holds
 - see who is connected, and route between them
+- adopt a roster published by a shepherd, after checking the signature and that
+  it belongs to the same flock
 - tell a machine it is no longer welcome, and close its connection
 
 It cannot:
@@ -65,6 +67,7 @@ It cannot:
 - read a command, or the output of one
 - forge a command, or impersonate a member
 - add itself to the flock
+- accept a roster signed by anybody other than this flock's key
 
 Every payload the connector forwards is encrypted between shepherd and sheep
 using keys it never sees. So running a connector on somebody else's machine is
@@ -92,9 +95,13 @@ All of it is the Go standard library. There is no third-party crypto.
 
 ## Revocation
 
-`forget` bumps the roster version. The connector notices the file changed within
-two seconds, drops any connection whose key is no longer listed, and refuses it
-next time. Other machines pick up the new roster the next time they ask for it.
+`forget` removes the entry, bumps the roster version, and publishes the new
+roster to every connector in the flock. A connector adopts a published roster
+only if it verifies *and* is signed by the same flock key it already trusts, so
+nobody can push a roster of their own and take the flock. Within a couple of
+seconds it drops any connection whose key is no longer listed, and refuses it
+next time. Sheep ask for the current roster when they connect, so they see the
+change too.
 
 This is honest about its limits: a direct conversation between two machines that
 never consults the connector cannot be interrupted by a roster change. Making
@@ -110,5 +117,6 @@ the connector is in the path.
 - **Interactive shells.** `run` executes and streams output; there is no pty and
   no stdin yet.
 - **File transfer.** `copy` is not implemented.
-- **Roster refresh for sheep.** A sheep keeps the roster it was given at invite
-  time and asks for a fresh one on reconnect, but does not poll for changes.
+- **A connector that boots with nothing.** A connector needs a roster before it
+  can authenticate anyone, so the very first one is handed a roster by hand.
+  After that the flock keeps it up to date on its own.

@@ -86,6 +86,13 @@ func Read(f *frame.Conn) (*proto.Envelope, error) {
 }
 
 // RouteTo wraps a payload for delivery to one member.
+//
+// The target is set both in the envelope and in the body: the connector needs
+// it to route, and it uses the envelope copy to say *which* machine failed when
+// a delivery cannot be made, so the sender learns immediately instead of waiting
+// for a timeout.
 func RouteTo(to string, payload json.RawMessage) *proto.Envelope {
-	return proto.Wrap(proto.TypeRoute, proto.Route{To: to, Payload: payload})
+	env := proto.Wrap(proto.TypeRoute, proto.Route{To: to, Payload: payload})
+	env.To = to
+	return env
 }

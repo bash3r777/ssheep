@@ -33,8 +33,9 @@ and which certificate to trust:
 sshepard invite --name <machine> --connector <host:port> --pin <fingerprint>
 ```
 
-That rewrites the roster, so copy it to the connector again. The connector
-notices the file change on its own and hot-reloads — no restart needed.
+`invite` and `forget` publish the new roster to every connector in the flock, so
+there is nothing to copy by hand afterwards. A connector adopts a roster only
+when it verifies and is signed by the flock key it already trusts.
 
 Because the connector is blind, it is the least valuable machine in the flock.
 If it is compromised, the attacker learns who talks to whom and nothing else. If

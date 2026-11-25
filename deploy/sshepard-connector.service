@@ -24,6 +24,9 @@ ProtectKernelTunables=yes
 ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 LimitNOFILE=65536
+# Other machines need an address they can dial. Add it to ExecStart if the
+# connector is behind a NAT or has more than one address:
+#   --advertise flock.example.com:7000
 
 [Install]
 WantedBy=multi-user.target

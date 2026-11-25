@@ -6,6 +6,7 @@
 package connector
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/tls"
@@ -206,7 +207,19 @@ func (s *Server) handle(nc net.Conn) {
 			return
 		}
 		if err := s.dispatch(p, env); err != nil {
-			_ = peer.Send(f, proto.Wrap(proto.TypeError, proto.ErrMsg{Message: err.Error()}))
+			e := proto.Wrap(proto.TypeError, proto.ErrMsg{Message: err.Error()})
+			if env.Type == proto.TypeRoute {
+				// Point the error at the machine that could not be reached, so
+				// the sender learns which target failed instead of waiting.
+				e.To = env.To
+				if e.To == "" {
+					var rt proto.Route
+					if env.Decode(&rt) == nil {
+						e.To = rt.To
+					}
+				}
+			}
+			_ = peer.Send(f, e)
 		}
 	}
 }
@@ -259,10 +272,51 @@ func (s *Server) dispatch(from *session, env *proto.Envelope) error {
 	case proto.TypeRoute:
 		return s.forward(from, env)
 	case proto.TypeRoster:
-		return peer.Send(from.conn, &proto.Envelope{Type: proto.TypeRoster, Body: s.roster.Load().Roster, To: from.id})
+		sr := s.roster.Load()
+		if sr == nil {
+			return errors.New("no roster")
+		}
+		body, err := json.Marshal(sr)
+		if err != nil {
+			return err
+		}
+		return peer.Send(from.conn, &proto.Envelope{Type: proto.TypeRoster, Body: body, To: from.id})
+	case proto.TypeRosterPush:
+		return s.acceptRoster(from, env)
 	default:
 		return fmt.Errorf("unknown message type %q", env.Type)
 	}
+}
+
+// acceptRoster adopts a roster published by a shepherd.
+//
+// Two things are checked before it is believed: the signature, and that it is
+// signed by the same flock key as the roster we already have. Without the second
+// check, anyone could push a roster signed by their own key and take the flock.
+func (s *Server) acceptRoster(from *session, env *proto.Envelope) error {
+	if from.role != flock.RoleShepherd {
+		return errors.New("only a shepherd may publish a roster")
+	}
+	var sr flock.SignedRoster
+	if err := json.Unmarshal(env.Body, &sr); err != nil {
+		return errors.New("that is not a roster")
+	}
+	r, err := sr.Verify()
+	if err != nil {
+		return err
+	}
+	if cur := s.roster.Load(); cur != nil {
+		if cr, err := cur.Verify(); err == nil && !bytes.Equal(cr.FlockKey, r.FlockKey) {
+			return errors.New("that roster belongs to a different flock")
+		}
+	}
+	if err := sr.Save(s.rosterPath); err != nil {
+		return err
+	}
+	s.roster.Store(&sr)
+	log.Printf("connector: roster published by %s, now at version %d (%d members)", from.name, r.Version, len(r.Members))
+	s.dropUnknown()
+	return peer.Send(from.conn, proto.Wrap(proto.TypeReady, proto.Ready{Version: r.Version}))
 }
 
 func (s *Server) sendList(from *session) error {

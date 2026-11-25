@@ -33,10 +33,17 @@ type Client struct {
 	roster flock.Roster
 
 	mu      sync.Mutex
-	wires   map[string]chan *tunnel.Wire
+	wires   map[string]*peerChan
 	replies chan *proto.Envelope
 	closed  chan struct{}
 	once    sync.Once
+}
+
+// peerChan carries everything arriving from one machine: tunnel messages, and
+// errors the connector raised about reaching it.
+type peerChan struct {
+	wires chan *tunnel.Wire
+	errs  chan error
 }
 
 // Open connects this machine to the flock.
@@ -75,7 +82,7 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 		name:    m.Name,
 		priv:    key.SignKey(),
 		roster:  roster,
-		wires:   map[string]chan *tunnel.Wire{},
+		wires:   map[string]*peerChan{},
 		replies: make(chan *proto.Envelope, 4),
 		closed:  make(chan struct{}),
 	}
@@ -122,28 +129,52 @@ func (c *Client) readLoop() {
 			if err != nil {
 				continue
 			}
-			c.mu.Lock()
-			ch := c.wires[d.From]
-			c.mu.Unlock()
-			if ch != nil {
+			c.deliver(d.From, func(pc *peerChan) bool {
 				select {
-				case ch <- w:
+				case pc.wires <- w:
+					return true
 				default: // a slow reader must never stall the whole connection
+					return false
+				}
+			})
+
+		case proto.TypeError:
+			var e proto.ErrMsg
+			_ = env.Decode(&e)
+			if env.To != "" {
+				delivered := c.deliver(env.To, func(pc *peerChan) bool {
+					select {
+					case pc.errs <- errors.New(e.Message):
+						return true
+					default:
+						return false
+					}
+				})
+				if delivered {
+					continue
 				}
 			}
+			if strings.Contains(e.Message, "roster") {
+				c.shutdown()
+			}
+
 		case proto.TypeListReply:
 			select {
 			case c.replies <- env:
 			default:
 			}
-		case proto.TypeError:
-			var e proto.ErrMsg
-			_ = env.Decode(&e)
-			if strings.Contains(e.Message, "roster") {
-				c.shutdown()
-			}
 		}
 	}
+}
+
+func (c *Client) deliver(id string, f func(*peerChan) bool) bool {
+	c.mu.Lock()
+	pc := c.wires[id]
+	c.mu.Unlock()
+	if pc == nil {
+		return false
+	}
+	return f(pc)
 }
 
 // List asks the connector who is in the flock and who is online.
@@ -212,9 +243,9 @@ func (c *Client) runOne(name string, argv []string, out io.Writer, multi bool) e
 	if m.Role != flock.RoleSheep {
 		return fmt.Errorf("is a %s, not a sheep", m.Role)
 	}
-	ch := make(chan *tunnel.Wire, 128)
+	pc := &peerChan{wires: make(chan *tunnel.Wire, 128), errs: make(chan error, 4)}
 	c.mu.Lock()
-	c.wires[m.ID] = ch
+	c.wires[m.ID] = pc
 	c.mu.Unlock()
 	defer func() {
 		c.mu.Lock()
@@ -239,7 +270,7 @@ func (c *Client) runOne(name string, argv []string, out io.Writer, multi bool) e
 
 	var sess *tunnel.Session
 	select {
-	case w := <-ch:
+	case w := <-pc.wires:
 		if w.Kind != tunnel.KindKex2 {
 			return errors.New("the machine sent an unexpected handshake reply")
 		}
@@ -247,6 +278,8 @@ func (c *Client) runOne(name string, argv []string, out io.Writer, multi bool) e
 		if err != nil {
 			return err
 		}
+	case err := <-pc.errs:
+		return err
 	case <-time.After(handshakeTimeout):
 		return errors.New("timed out waiting for the machine")
 	case <-c.closed:
@@ -267,7 +300,7 @@ func (c *Client) runOne(name string, argv []string, out io.Writer, multi bool) e
 
 	for {
 		select {
-		case w := <-ch:
+		case w := <-pc.wires:
 			if w.Kind != tunnel.KindEnc {
 				continue
 			}
@@ -293,6 +326,8 @@ func (c *Client) runOne(name string, argv []string, out io.Writer, multi bool) e
 				}
 				return nil
 			}
+		case err := <-pc.errs:
+			return err
 		case <-c.closed:
 			return errors.New("lost the connector")
 		}
@@ -305,6 +340,70 @@ func (c *Client) sendWire(to string, w *tunnel.Wire) error {
 		return err
 	}
 	return peer.Send(c.conn, peer.RouteTo(to, raw))
+}
+
+// Publish pushes the current roster to every connector in it.
+//
+// The roster is a file, but it is not the operator's job to copy it around. Any
+// shepherd may publish it, and a connector only believes a roster that is signed
+// by the flock key it already trusts.
+func Publish(rosterPath, nodeKeyPath string) (pushed int, err error) {
+	sr, err := flock.LoadSignedRoster(rosterPath)
+	if err != nil {
+		return 0, err
+	}
+	roster, err := sr.Verify()
+	if err != nil {
+		return 0, err
+	}
+	if len(roster.Connectors) == 0 {
+		return 0, nil
+	}
+	key, err := flock.LoadKeyFile(nodeKeyPath)
+	if err != nil {
+		return 0, err
+	}
+	id := flock.NodeID(key.SignPub())
+	m := roster.Find(id)
+	if m == nil || m.Role != flock.RoleShepherd {
+		return 0, errors.New("shepherd: only a shepherd machine can publish the roster")
+	}
+
+	var firstErr error
+	for _, cn := range roster.Connectors {
+		if err := publishTo(cn, id, key.SignKey(), sr); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		pushed++
+	}
+	return pushed, firstErr
+}
+
+func publishTo(cn flock.Connector, id string, priv ed25519.PrivateKey, sr *flock.SignedRoster) error {
+	conn, err := peer.Dial(cn.Addr, cn.Pin, id, priv, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("%s: %w", cn.Addr, err)
+	}
+	defer conn.Close()
+	if err := peer.Send(conn, proto.Wrap(proto.TypeRosterPush, sr)); err != nil {
+		return fmt.Errorf("%s: %w", cn.Addr, err)
+	}
+	env, err := peer.Read(conn)
+	if err != nil {
+		return fmt.Errorf("%s: %w", cn.Addr, err)
+	}
+	if env.Type != proto.TypeReady {
+		var e proto.ErrMsg
+		_ = env.Decode(&e)
+		if e.Message == "" {
+			e.Message = env.Type
+		}
+		return fmt.Errorf("%s: %s", cn.Addr, e.Message)
+	}
+	return nil
 }
 
 // lineWriter prefixes every line, so output from several machines stays readable.
