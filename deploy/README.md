@@ -11,40 +11,35 @@ install -m 0644 deploy/ssheep-connector.service /etc/systemd/system/
 systemctl daemon-reload
 ```
 
-It needs one file to run: the flock's roster.
+Then hand it the ticket that `ssheep master` printed:
 
 ```sh
-# on the master machine
-ssheep init --name myflock
-
-# on the connector
-mkdir -p /var/lib/ssheep
-scp master-box:~/.ssheep/roster.json /var/lib/ssheep/
+ssheep connector "<ticket>" --dir /var/lib/ssheep --install-only
 systemctl enable --now ssheep-connector
-journalctl -u ssheep-connector | grep -i fingerprint
+journalctl -u ssheep-connector | head
 ```
 
-The connector generates its TLS certificate on first start and prints its
-fingerprint. Register it from the master machine — this reads the fingerprint
-from the connector itself and publishes the roster, so nothing needs copying by
-hand:
+That is all. The service runs `ssheep connector --dir /var/lib/ssheep`, which for
+an enrolled machine means "serve a relay **and** tell the flock where it is". The
+connector works out its own address by asking the flock what it looks like from
+outside, offers itself, and the master accepts it on its next command. Nothing is
+copied by hand.
+
+Behind a NAT with no port forwarding that guess is wrong. The master will say so
+and add nothing; then pass the truth:
 
 ```sh
-ssheep connector add --addr <host:port>
-ssheep connector list
+ssheep connector "<ticket>" --addr <the address people really reach you at>:7000
 ```
-
-A connector adopts a roster only when it verifies and is signed by the flock key
-it already trusts.
 
 **Run more than one.** Two connectors on different networks turn a bad afternoon
 into a non-event; every sheep holds a link to each of them, and a master falls
-through the list. `connector add` twice is the whole procedure.
+through the list. A second ticket is `ssheep master --invite`.
 
 Because the connector is blind, it is the least valuable machine in the flock.
 If it is compromised, the attacker learns who talks to whom and nothing else. If
-it is lost, nothing is lost with it: stand up another, and point the flock at
-its address.
+it is lost, nothing is lost with it: stand up another, and it registers itself
+the same way.
 
 ## Donating a relay
 
@@ -80,21 +75,21 @@ useradd --system --home /var/lib/ssheep --create-home ssheep
 install -m 0644 deploy/ssheep-sheep.service /etc/systemd/system/
 systemctl daemon-reload
 
-# one time: unpack the ticket you were handed
-ssheep sheep --dir /var/lib/ssheep --invite-file /root/pi.invite.json --install-only
+# one time: the ticket that `ssheep master` printed
+ssheep sheep "<ticket>" --dir /var/lib/ssheep --install-only
 
 systemctl enable --now ssheep-sheep
 ```
 
-`--install-only` unpacks the ticket and exits. Without it, `ssheep sheep`
-installs first if there is no identity yet, then serves — so the same line works
-in a provisioning script on a fresh machine and as a no-op on one that is
-already enrolled. It never overwrites an existing identity.
+`--install-only` unpacks the ticket and exits. Without it, `ssheep sheep` installs
+first if there is no identity yet, then serves — so the same line works in a
+provisioning script on a fresh machine and as a no-op on one that is already
+enrolled. It never overwrites an existing identity.
 
 ## Verifying
 
 ```sh
 ssheep see                      # every machine, and whether it is online
-ssheep run --name pi -- uptime  # one machine
+ssheep run --name sheep-1 -- uptime  # one machine
 ssheep run --all -- uptime      # all of them at once
 ```

@@ -109,6 +109,29 @@ func Resolve(s string) (*Invite, error) {
 	return Decode(s)
 }
 
+// Install unpacks an invite onto this machine. It refuses to overwrite an
+// existing identity, so running it twice cannot silently re-key a machine.
+//
+// It is the same job for every role: write the key pair the invite carries, and
+// the signed roster that goes with it. Which command the machine then runs
+// decides what it does.
+func Install(rosterPath, nodeKeyPath, source string) error {
+	if _, err := os.Stat(nodeKeyPath); err == nil {
+		return fmt.Errorf("invite: %s already exists; this machine is already enrolled", nodeKeyPath)
+	}
+	in, err := Resolve(source)
+	if err != nil {
+		return err
+	}
+	if _, err := in.Validate(); err != nil {
+		return err
+	}
+	if err := in.Key().Save(nodeKeyPath); err != nil {
+		return err
+	}
+	return in.Roster.Save(rosterPath)
+}
+
 // Save writes the human-readable form of an invite, readable only by its owner.
 func Save(path string, inv *Invite) error {
 	b, err := json.MarshalIndent(inv, "", "  ")

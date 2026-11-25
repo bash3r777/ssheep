@@ -31,14 +31,23 @@ type Identity struct {
 // Dial connects, proves this machine's identity, and hands over the flock if the
 // connector does not know it yet.
 func Dial(addr, pin string, who Identity, timeout time.Duration) (*frame.Conn, error) {
+	conn, _, err := DialReady(addr, pin, who, timeout)
+	return conn, err
+}
+
+// DialReady is Dial, and also hands back what the connector said on the way in.
+// YouAre is the address the connector saw this machine at, which is how a machine
+// behind a NAT finds out what it looks like from outside.
+func DialReady(addr, pin string, who Identity, timeout time.Duration) (*frame.Conn, proto.Ready, error) {
+	var ready proto.Ready
 	nc, err := netx.DialPinned(addr, pin, timeout)
 	if err != nil {
-		return nil, err
+		return nil, ready, err
 	}
 	f := frame.New(nc)
-	fail := func(err error) (*frame.Conn, error) {
+	fail := func(err error) (*frame.Conn, proto.Ready, error) {
 		nc.Close()
-		return nil, err
+		return nil, ready, err
 	}
 
 	env, err := Read(f)
@@ -83,7 +92,8 @@ func Dial(addr, pin string, who Identity, timeout time.Duration) (*frame.Conn, e
 		}
 		return fail(fmt.Errorf("peer: connector refused: %s", e.Message))
 	}
-	return f, nil
+	_ = env.Decode(&ready)
+	return f, ready, nil
 }
 
 // AuthMessage is what a machine signs to prove it holds its private key.

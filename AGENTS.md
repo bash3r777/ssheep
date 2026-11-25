@@ -13,22 +13,39 @@ relay ("a connector"). One Go binary does all three roles.
 ## Layout
 
 ```
-cmd/ssheep/         the CLI: argument parsing, one function per subcommand
+cmd/ssheep/         the CLI: one file per command group
 internal/flock/     the roster: identity, keys, signing, node and flock ids
-internal/invite/    single-use tickets (a key pair plus a signed roster)
+internal/invite/    single-use tickets (a key pair plus a signed roster), and
+                    the one function that unpacks one onto a machine
 internal/frame/     length-prefixed messages over a stream
 internal/proto/     the envelope spoken to a connector
 internal/netx/      pinned TLS: self-signed certs, fingerprint dialling
 internal/tunnel/    the end-to-end session: X25519 + Ed25519 + AES-GCM
-internal/connector/ the relay: challenge/response auth, flock registry, routing
+internal/connector/ the relay: auth, flock registry, routing, offers, join.go
 internal/sheep/     the agent: links, exec, roster following
-internal/master/    the operator side: list, run, publish
+internal/master/    the operator side: list, run, publish, offers.go
 site/               the website, served at ssheep.xyz from shared hosting
 deploy/             systemd units and how to run them
 ```
 
 Dependencies: **none beyond the Go standard library.** Keep it that way. The
 static binary with no dependencies is a feature, not an accident.
+
+## The commands people actually use
+
+`ssheep master` is the whole setup: it creates the flock, pre-adds the project's
+public relay, mints tickets, prints the two lines to paste elsewhere, accepts any
+connector that has registered itself, and reports. Everything it picks is a
+default that a flag can override — the point is that nobody has to read the flags.
+
+`ssheep sheep "<ticket>"` and `ssheep connector "<ticket>"` are the other two.
+Both take the ticket as a positional argument because that is what people paste.
+With no ticket they carry on doing what the machine is already enrolled as, so a
+restart never changes a machine's role.
+
+The older step-by-step commands (`init`, `invite`, `connector add`) still exist
+and still work. Keep them working: they are how somebody takes control when the
+defaults do not fit.
 
 ## Build, test, check
 

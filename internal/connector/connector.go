@@ -21,6 +21,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -30,6 +31,11 @@ import (
 	"ssheep.xyz/internal/peer"
 	"ssheep.xyz/internal/proto"
 )
+
+// offerTTL is how long a machine's offer to be a relay is worth keeping. Long
+// enough for someone to start a connector and then run a command on the master;
+// short enough that stale addresses do not linger.
+const offerTTL = 24 * time.Hour
 
 // Config describes how a connector should behave.
 type Config struct {
@@ -64,16 +70,18 @@ type Server struct {
 type flockState struct {
 	id string
 
-	mu    sync.Mutex
-	sr    *flock.SignedRoster
-	ver   uint64
-	peers map[string]*session
+	mu     sync.Mutex
+	sr     *flock.SignedRoster
+	ver    uint64
+	peers  map[string]*session
+	offers map[string]proto.Offer
 }
 
 type session struct {
 	id    string
 	name  string
 	role  string
+	addr  string // what this connection looks like from here
 	since time.Time
 	conn  *frame.Conn
 }
@@ -340,12 +348,12 @@ func (s *Server) handle(nc net.Conn) {
 		return
 	}
 
-	p := &session{id: m.ID, name: m.Name, role: m.Role, since: time.Now(), conn: f}
+	p := &session{id: m.ID, name: m.Name, role: m.Role, addr: nc.RemoteAddr().String(), since: time.Now(), conn: f}
 	st.addPeer(p)
 	defer st.removePeer(p)
 	log.Printf("connector: %s (%s) connected from %s [flock %s]", p.name, p.id, nc.RemoteAddr(), st.id)
 
-	if err := peer.Send(f, proto.Wrap(proto.TypeReady, proto.Ready{Version: st.version()})); err != nil {
+	if err := peer.Send(f, proto.Wrap(proto.TypeReady, proto.Ready{Version: st.version(), YouAre: p.addr})); err != nil {
 		return
 	}
 	for {
@@ -482,9 +490,39 @@ func (s *Server) dispatch(st *flockState, from *session, env *proto.Envelope) er
 			return err
 		}
 		return peer.Send(from.conn, &proto.Envelope{Type: proto.TypeRoster, Body: body, To: from.id})
+	case proto.TypeOffer:
+		return s.acceptOffer(st, from, env)
 	default:
 		return fmt.Errorf("unknown message type %q", env.Type)
 	}
+}
+
+// acceptOffer files a machine's offer to be a relay.
+//
+// The relay only keeps it. Whether the offer is *believed* is the master's
+// decision: it checks the signature against the roster and then dials the
+// address itself. Keeping that out of the relay means a relay cannot promote
+// itself into the flock.
+func (s *Server) acceptOffer(st *flockState, from *session, env *proto.Envelope) error {
+	var o proto.Offer
+	if err := env.Decode(&o); err != nil {
+		return err
+	}
+	if o.ID != from.id {
+		return errors.New("an offer has to be made by the machine sending it")
+	}
+	host, port, err := net.SplitHostPort(o.Addr)
+	if err != nil || host == "" || port == "" {
+		return errors.New("an offer needs an address in host:port form")
+	}
+	if len(o.Pin) != 64 {
+		return errors.New("an offer needs a certificate fingerprint")
+	}
+	o.Name = from.name
+	o.At = time.Now().UTC()
+	st.setOffer(o)
+	log.Printf("connector: %s offers itself as a connector at %s", from.name, o.Addr)
+	return peer.Send(from.conn, proto.Wrap(proto.TypeReady, proto.Ready{Version: st.version()}))
 }
 
 func (s *Server) sendList(st *flockState, from *session) error {
@@ -499,7 +537,43 @@ func (s *Server) sendList(st *flockState, from *session) error {
 			ID: m.ID, Name: m.Name, Role: m.Role, Online: online[m.ID],
 		})
 	}
+	// Offers that have already been taken up are no longer interesting.
+	taken := make(map[string]bool, len(r.Connectors))
+	for _, c := range r.Connectors {
+		taken[c.Addr] = true
+	}
+	for _, o := range st.currentOffers() {
+		if !taken[o.Addr] {
+			reply.Offers = append(reply.Offers, o)
+		}
+	}
 	return peer.Send(from.conn, proto.Wrap(proto.TypeListReply, reply))
+}
+
+// setOffer keeps a machine's offer, replacing any earlier one from it.
+func (st *flockState) setOffer(o proto.Offer) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if st.offers == nil {
+		st.offers = map[string]proto.Offer{}
+	}
+	st.offers[o.ID] = o
+}
+
+// currentOffers returns the offers that have not gone stale.
+func (st *flockState) currentOffers() []proto.Offer {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	var out []proto.Offer
+	for id, o := range st.offers {
+		if time.Since(o.At) > offerTTL {
+			delete(st.offers, id)
+			continue
+		}
+		out = append(out, o)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
+	return out
 }
 
 // forward delivers an opaque payload without looking inside it.

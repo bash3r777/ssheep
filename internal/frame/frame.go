@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 // MaxFrame bounds a single message. Nothing legitimate comes close to this.
@@ -61,6 +62,10 @@ func (f *Conn) Write(b []byte) error {
 
 // Close closes the underlying connection.
 func (f *Conn) Close() error { return f.c.Close() }
+
+// SetReadDeadline bounds how long the next Read will wait. A zero time means no
+// deadline.
+func (f *Conn) SetReadDeadline(t time.Time) error { return f.c.SetReadDeadline(t) }
 
 // RemoteAddr reports the peer's address.
 func (f *Conn) RemoteAddr() net.Addr { return f.c.RemoteAddr() }

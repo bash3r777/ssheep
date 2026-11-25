@@ -37,24 +37,28 @@ git clone https://github.com/bash3r777/ssheep && cd ssheep && make build
 ## Quick start
 
 ```sh
-# on the machine that will be your master
-ssheep init --name myflock
+# on the machine you will control the flock from
+ssheep master
+```
 
-# on a machine with a reachable address — a small VPS, usually
-ssheep connector --listen :7000
+It prints two things. Paste the first on each machine you want in the flock, one
+ticket each, and the second on the one machine with a public address:
 
-# back on the master: register it, then mint a ticket for a new machine
-ssheep connector add --addr <that machine>:7000
-ssheep invite --name pi --out pi.ticket
+```sh
+ssheep sheep "<ticket>"
+ssheep connector "<ticket>"
+```
 
-# on the new machine, with the binary and the ticket
-ssheep sheep --invite-file pi.ticket --install-only
+That is the whole setup. The connector works out its own address and tells the
+flock, so there is no address or fingerprint to copy anywhere. Then:
 
-# use it
+```sh
 ssheep see
-ssheep run --name pi -- uptime
 ssheep run --all -- uptime
 ```
+
+Every default is overridable — the flock name, the public relay it starts with,
+how many tickets are minted, the connector's port. See `ssheep master -h`.
 
 Add a second connector early. Machines try them in roster order and survive
 losing any of them; one connector is a single point of failure.

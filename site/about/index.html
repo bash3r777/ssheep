@@ -49,15 +49,28 @@
   </table>
 
   <h2>Adding and removing machines</h2>
-  <p><code>ssheep invite --name pi</code> generates a key pair for the new machine, adds its
-  public key to the roster, re-signs it, and prints a single-use ticket. The ticket carries
-  that machine's private key, so hand it over privately. <code>ssheep forget --name pi</code>
-  removes it and publishes the new roster; connectors drop it within seconds.</p>
+  <p><code>ssheep master</code> generates a key pair for each new machine, adds its public
+  key to the roster, re-signs it, and prints a ticket. The ticket carries that machine's
+  private key, so hand it over privately. <code>ssheep forget --name sheep-2</code>
+  removes one and publishes the new roster; connectors drop it within seconds.</p>
+
+  <h2>How a connector finds its own address</h2>
+  <p>A master cannot know a connector's address in advance — the connector is the machine
+  with the public address, and the master has never spoken to it. So the connector says so
+  itself: it asks the flock what it looks like from outside, and offers itself at that
+  address on its listening port, through whatever connector the flock already has.</p>
+  <p>Three things have to line up before the offer is believed, and the middle one is the
+  point: the roster must list that machine as a connector — only the master can do that —
+  the offer must be signed by that machine, so the relay that carried it could not have
+  rewritten the address and promoted itself, and the address must answer with exactly the
+  certificate the offer claims.</p>
 
   <h2>More than one connector</h2>
   <p>A single connector is a single point of failure, which is a strange thing for a tool
   whose point is not needing anyone. A flock can list several: every sheep keeps a link to
-  each of them, and a master tries them in order. Losing one costs the flock nothing.</p>
+  each of them, and a master tries them in order. Losing one costs the flock nothing. A new
+  flock starts with the project's public relay already listed, so it works before its owner
+  has run a connector of their own.</p>
 
   <h2>What is missing</h2>
   <p>Direct peer-to-peer connections, an interactive shell, and file transfer. Today every

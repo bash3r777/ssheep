@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=simple
 # The connector holds no secrets. It needs the public roster and its own TLS
 # certificate, both of which live in its state directory.
-ExecStart=/usr/local/bin/ssheep connector --dir /var/lib/ssheep --listen :7000
+ExecStart=/usr/local/bin/ssheep connector --dir /var/lib/ssheep
 Restart=always
 RestartSec=3
 

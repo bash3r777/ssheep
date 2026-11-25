@@ -22,9 +22,13 @@ import (
 )
 
 // Roles a member can hold.
+//
+// A connector is a member too: it holds a key, it appears in the roster, and its
+// role is what says "this machine may offer itself as a relay for the flock".
 const (
-	RoleSheep    = "sheep"
-	RoleMaster = "master"
+	RoleSheep     = "sheep"
+	RoleMaster    = "master"
+	RoleConnector = "connector"
 )
 
 // Connector is a reachable address book and relay.
@@ -233,6 +237,22 @@ func (r Roster) ConnectorsFor(want string) ([]Connector, error) {
 		return nil, errors.New("flock: this flock has no connector yet")
 	}
 	return r.Connectors, nil
+}
+
+// ValidRole reports whether a role is one this build understands.
+func ValidRole(r string) bool {
+	return r == RoleSheep || r == RoleMaster || r == RoleConnector
+}
+
+// Operators returns the members allowed to run the flock: the masters.
+func (r Roster) Operators() []Member {
+	var out []Member
+	for _, m := range r.Members {
+		if m.Role == RoleMaster {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------

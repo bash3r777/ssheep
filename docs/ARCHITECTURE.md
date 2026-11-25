@@ -14,8 +14,8 @@ Three roles, one binary.
 
 | Role | Job | Holds secrets | Must be reachable |
 |---|---|---|---|
-| **master** | Mints invites, issues commands, holds the authority key | yes — the flock key | no |
-| **connector** | Address book and relay | no | yes |
+| **master** | Mints tickets, issues commands, holds the authority key | yes — the flock key | no |
+| **connector** | Address book and relay. A member of the flock like any other, which is how it tells the flock where it is. | no | yes |
 | **sheep** | Does the work | only its own key | no |
 
 Sheep and masters only ever dial *out*. That is why no ports need to be
@@ -137,6 +137,34 @@ Serving strangers is a decision worth making out loud, and the limits — how ma
 flocks, how many connections, how many members — belong to whoever is paying for
 the bandwidth.
 
+## How a connector gets into the roster
+
+A connector is a member of the flock, with a key and a role, and that is what
+solves the last awkward part of setting up: the master cannot know a connector's
+address, because the connector is the machine with the public address and the
+master has never spoken to it.
+
+So the connector announces itself. It asks the flock what it looks like from
+outside (`Ready.YouAre` — the connector's view of the connection), works out the
+address it should be reachable at, and sends a signed **offer** through whatever
+connector the flock already has. The master reads offers on its next command and
+accepts the ones it believes.
+
+Three checks stand between an offer and the roster:
+
+1. **the roster lists that machine as a connector.** Only the master can add one,
+   so an ordinary sheep cannot promote itself.
+2. **the offer is signed by that machine.** The relay in the middle sees the offer
+   in the clear, so without a signature it could rewrite the address and point the
+   flock at itself.
+3. **the address answers with exactly the certificate the offer claims.** The
+   master dials it and checks the fingerprint before writing anything down.
+
+If the guess is wrong — a machine behind a NAT with no port forwarding — the
+master says so and nothing is added, and `--addr` is there to be told the truth.
+A flock is still perfectly usable with no connector of its own: a new one starts
+with the project's public relay in its roster.
+
 ## More than one connector
 
 A single connector is a single point of failure: its bad afternoon becomes the
@@ -170,9 +198,13 @@ can end it.
 - **Interactive shells.** `run` executes and streams output; there is no pty and
   no stdin yet.
 - **File transfer.** `copy` is not implemented.
-- **The public relay pool.** A relay can already serve many flocks and learn
-  them from the flocks themselves. What does not exist yet is the directory of
-  volunteers and the client-side selection that would use one by default.
+- **A directory of volunteer relays.** One default relay is built in, and a
+  connector registers itself with its flock. What does not exist yet is a pool of
+  volunteered relays, and the client-side selection that would spread flocks
+  across several.
 - **Per-flock quotas.** A relay can cap flocks, connections and members in
   total, but not per flock, so one member of the community could still be the
   noisy one.
+- **Roster freshness between machines.** Online/offline is reported per
+  connector, so with several connectors a machine connected to a different one
+  shows as offline to a master asking elsewhere.

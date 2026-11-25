@@ -4,7 +4,10 @@
 // want to reach, and the opaque payload in between. It never sees plaintext.
 package proto
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Envelope types.
 const (
@@ -12,10 +15,11 @@ const (
 	TypeAuth      = "auth"      // peer -> connector: signed challenge, plus the roster
 	TypeReady     = "ready"     // connector -> peer: you are in
 	TypeList      = "list"      // peer -> connector: who is there?
-	TypeListReply = "listreply" // connector -> peer: the flock, with presence
+	TypeListReply = "listreply" // connector -> peer: the flock, with presence and offers
 	TypeRoute     = "route"     // peer -> connector: deliver this to someone
 	TypeData      = "data"      // connector -> peer: someone sent you this
 	TypeRoster    = "roster"    // connector -> peer: the current signed roster
+	TypeOffer     = "offer"     // peer -> connector: I can serve as a connector
 	TypeError     = "error"
 )
 
@@ -70,9 +74,35 @@ type Auth struct {
 	Roster json.RawMessage `json:"roster,omitempty"`
 }
 
-// Ready acknowledges a successful join.
+// Ready acknowledges a successful join. YouAre is the address the connector sees
+// the peer at, which is how a machine behind a NAT learns what it looks like from
+// outside.
 type Ready struct {
 	Version uint64 `json:"version"`
+	YouAre  string `json:"you_are,omitempty"`
+}
+
+// Offer is a machine volunteering to be a relay for its flock.
+//
+// It is what makes the setup one command: the master cannot know a connector's
+// address in advance, so the connector says so itself, through whatever
+// connector the flock already has. Any member can send one; only a member the
+// roster lists as a connector is believed.
+//
+// Sig covers the whole offer, so the connector in the middle cannot rewrite the
+// address and point the flock at itself.
+type Offer struct {
+	ID   string    `json:"id"`   // the member making the offer
+	Name string    `json:"name"` // its name, for reporting
+	Addr string    `json:"addr"` // host:port, as the machine believes it is reachable
+	Pin  string    `json:"pin"`  // fingerprint of its relay certificate
+	At   time.Time `json:"at"`
+	Sig  []byte    `json:"sig,omitempty"`
+}
+
+// OfferMessage is what a machine signs to prove an offer is really its own.
+func OfferMessage(flockID, nodeID, addr, pin string) []byte {
+	return []byte("ssheep-offer|" + flockID + "|" + nodeID + "|" + addr + "|" + pin)
 }
 
 // MemberStatus is one flock member as seen by the connector.
@@ -89,6 +119,7 @@ type ListReply struct {
 	Flock   string         `json:"flock,omitempty"`
 	Name    string         `json:"name,omitempty"`
 	Members []MemberStatus `json:"members"`
+	Offers  []Offer        `json:"offers,omitempty"`
 }
 
 // Route is a request to deliver an opaque payload to a member.

@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -26,7 +25,6 @@ import (
 
 	"ssheep.xyz/internal/flock"
 	"ssheep.xyz/internal/frame"
-	"ssheep.xyz/internal/invite"
 	"ssheep.xyz/internal/peer"
 	"ssheep.xyz/internal/proto"
 	"ssheep.xyz/internal/tunnel"
@@ -35,26 +33,6 @@ import (
 // errRevoked means the flock no longer contains this machine. Retrying will not
 // help, so the agent stops rather than hammering the connector.
 var errRevoked = errors.New("sheep: this machine is no longer in the flock")
-
-// Install unpacks an invite onto this machine. It refuses to overwrite an
-// existing identity, so running it twice cannot silently re-key a machine.
-func Install(rosterPath, nodeKeyPath, source string) error {
-	if _, err := os.Stat(nodeKeyPath); err == nil {
-		return fmt.Errorf("sheep: %s already exists; this machine is already enrolled", nodeKeyPath)
-	}
-	in, err := invite.Resolve(source)
-	if err != nil {
-		return err
-	}
-	if _, err := in.Validate(); err != nil {
-		return err
-	}
-	key := in.Key()
-	if err := key.Save(nodeKeyPath); err != nil {
-		return err
-	}
-	return in.Roster.Save(rosterPath)
-}
 
 // Run joins the flock and serves until the process is stopped.
 func Run(rosterPath, nodeKeyPath, connectorAddr string) error {

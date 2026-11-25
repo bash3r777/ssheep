@@ -26,22 +26,36 @@ import (
 // version is stamped at build time.
 var version = "dev"
 
+// The opinionated defaults. Everything below can be overridden; none of it has
+// to be, which is the point.
+const (
+	// defaultRelay is the public relay a new flock starts with, so that a flock
+	// works before its owner has run a single connector.
+	defaultRelay = "relay.ssheep.xyz:7000"
+	// defaultPort is what a connector listens on.
+	defaultPort = 7000
+	// defaultSheep is how many sheep tickets `ssheep master` mints up front.
+	defaultSheep = 3
+)
+
 const usage = `ssheep — one binary, one file, one key.
 
-  init               create a new flock on this machine
-  invite             mint a single-use invite for a new machine
-  sheep              join this machine to a flock, then serve
-  see                show the flock, live
-  run                run a command on one machine or on all of them
-  forget             revoke a machine and remove it from the roster
+  master                 set up a whole flock: one command, then paste two lines
+  sheep "<ticket>"       turn this machine into a sheep
+  connector "<ticket>"   turn this machine into a connector
 
-  connector          run the address book and relay
-  connector add      register a connector with the flock
-  connector remove   forget one
-  connector list     show them, and whether they answer
-  pin                print the fingerprint of a running connector
+  see                    show the flock, live
+  run                    run a command on one machine or on all of them
+  forget                 revoke a machine and remove it from the roster
 
-  version            print the version
+  init, invite           the same thing step by step, when you want control
+  connector              run a relay with no flock of its own
+  connector add          register a connector by hand
+  connector remove       forget one
+  connector list         show them, and whether they answer
+  pin                    print the fingerprint of a running connector
+
+  version                print the version
 
 Run "ssheep <command> -h" for the flags of any command.`
 
@@ -57,6 +71,8 @@ func main() {
 
 	var err error
 	switch cmd {
+	case "master":
+		err = cmdMaster(args)
 	case "init":
 		err = cmdInit(args)
 	case "invite":
@@ -177,9 +193,12 @@ func cmdInit(args []string) error {
 	fmt.Printf("  authority key %s   <- keep this offline\n", flockKeyPath)
 	fmt.Printf("  this machine  %s (%s)\n\n", machineName, r.Members[0].ID)
 	fmt.Printf("next:\n")
-	fmt.Printf("  1. on an always-on machine, run:  ssheep connector --listen :7000\n")
-	fmt.Printf("  2. register it here:              ssheep connector add --addr <host:port>\n")
-	fmt.Printf("  3. add your first sheep:          ssheep invite --name pi\n")
+	fmt.Printf("  the easy way is one command:\n\n")
+	fmt.Printf("      ssheep master      mints the tickets and prints the two lines to paste\n\n")
+	fmt.Printf("  or go step by step:\n")
+	fmt.Printf("      1. on a machine with a public address:  ssheep connector\n")
+	fmt.Printf("      2. register it here:                    ssheep connector add --addr <host:port>\n")
+	fmt.Printf("      3. add your first sheep:                ssheep invite --name pi\n")
 	fmt.Printf("\nadd a second connector early: with only one, its bad day is the flock's bad day.\n")
 	return nil
 }
@@ -200,8 +219,8 @@ func cmdInvite(args []string) error {
 	if *name == "" {
 		return errors.New("invite: --name is required")
 	}
-	if *role != flock.RoleSheep && *role != flock.RoleMaster {
-		return fmt.Errorf("invite: --role must be %q or %q", flock.RoleSheep, flock.RoleMaster)
+	if *role != flock.RoleSheep && *role != flock.RoleMaster && *role != flock.RoleConnector {
+		return fmt.Errorf("invite: --role must be %q, %q or %q", flock.RoleSheep, flock.RoleMaster, flock.RoleConnector)
 	}
 	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
 
@@ -302,6 +321,16 @@ func cmdConnector(args []string) error {
 		case "list":
 			return cmdConnectorList(args[1:])
 		}
+		// A ticket as the first argument means "join the flock as a connector".
+		if !strings.HasPrefix(args[0], "-") {
+			return cmdConnectorJoin(args)
+		}
+	}
+	// No ticket. If this machine is already enrolled as a connector, carry on
+	// being one — a restart should not turn it into something else. Otherwise
+	// run a plain relay with no flock of its own.
+	if enrolledRole(argValue(args, "dir")) == flock.RoleConnector {
+		return cmdConnectorJoin(args)
 	}
 	fs := newFlagSet("connector")
 	listen := fs.String("listen", ":7000", "address to listen on")
@@ -394,6 +423,43 @@ func firstRoutableIP() string {
 		return ipnet.IP.String()
 	}
 	return ""
+}
+
+// cmdConnectorJoin turns this machine into a connector for its flock: it starts
+// a relay and tells the other connectors where it is, so nobody has to carry an
+// address or a fingerprint to the master by hand.
+func cmdConnectorJoin(args []string) error {
+	fs := newFlagSet("connector")
+	addr := fs.String("addr", "", "the address other machines will reach this one at\n(set it if the guess is wrong; the guess is what this machine looks like from outside)")
+	port := fs.Int("port", defaultPort, "port to listen on")
+	public := fs.Bool("public", false, "also serve flocks that are not yours")
+	file := fs.String("ticket-file", "", "read the ticket from a file instead of the command line")
+	installOnly := fs.Bool("install-only", false, "unpack the ticket and exit, do not serve")
+	dir := fs.String("dir", "", "where keys and the roster live")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	rosterPath, _, nodeKeyPath := state(*dir)
+
+	source := fs.Arg(0)
+	if source == "" {
+		source = *file
+	}
+	if source != "" {
+		if err := invite.Install(rosterPath, nodeKeyPath, source); err != nil {
+			return err
+		}
+		fmt.Println("📡  this machine is enrolled as a connector")
+	}
+	if _, err := os.Stat(nodeKeyPath); err != nil {
+		return errors.New(`connector: this machine is not enrolled yet
+
+  run:  ssheep connector "<ticket>"   (the ticket is printed by ` + "`ssheep master`" + `)`)
+	}
+	if *installOnly {
+		return nil
+	}
+	return connector.Join(rosterPath, nodeKeyPath, *addr, *port, *public)
 }
 
 func cmdPin(args []string) error {
@@ -584,28 +650,29 @@ func cmdConnectorList(args []string) error {
 
 func cmdSheep(args []string) error {
 	fs := newFlagSet("sheep")
-	blob := fs.String("invite", "", "an invite ticket to install")
-	file := fs.String("invite-file", "", "a path to an invite file to install")
+	file := fs.String("ticket-file", "", "read the ticket from a file instead of the command line")
 	conn := fs.String("connector", "", "use this connector instead of the flock's first")
 	dir := fs.String("dir", "", "where keys and the roster live")
-	installOnly := fs.Bool("install-only", false, "unpack the invite and exit, do not serve")
+	installOnly := fs.Bool("install-only", false, "unpack the ticket and exit, do not serve")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	rosterPath, _, nodeKeyPath := state(*dir)
 
-	source := *file
+	source := fs.Arg(0)
 	if source == "" {
-		source = *blob
+		source = *file
 	}
 	if source != "" {
-		if err := sheep.Install(rosterPath, nodeKeyPath, source); err != nil {
+		if err := invite.Install(rosterPath, nodeKeyPath, source); err != nil {
 			return err
 		}
-		fmt.Printf("installed %s\n", nodeKeyPath)
+		fmt.Println("🐑  this machine is in the flock")
 	}
 	if _, err := os.Stat(nodeKeyPath); err != nil {
-		return errors.New("sheep: this machine is not enrolled yet — pass --invite or --invite-file")
+		return errors.New(`sheep: this machine is not enrolled yet
+
+  run:  ssheep sheep "<ticket>"     (the ticket is printed by ` + "`ssheep master`" + `)`)
 	}
 	if *installOnly {
 		return nil
@@ -659,6 +726,9 @@ func cmdSee(args []string) error {
 	}
 	if n := len(c.Connectors()); n > 1 {
 		fmt.Printf("via %s (of %d connectors)\n", c.Connector(), n)
+	}
+	if len(reply.Offers) > 0 {
+		fmt.Printf("\n%d connector(s) waiting to register — run `ssheep master` to accept\n", len(reply.Offers))
 	}
 	return nil
 }

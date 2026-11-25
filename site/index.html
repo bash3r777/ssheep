@@ -24,9 +24,9 @@
 
   <h2>Three things</h2>
   <table>
-    <tr><td>👑 <b>master</b></td><td>Holds the flock key, mints invites, runs commands. Can sit behind a NAT, switched off most of the time.</td></tr>
+    <tr><td>👑 <b>master</b></td><td>Holds the flock key, mints tickets, runs commands. Can sit behind a NAT, switched off most of the time.</td></tr>
     <tr><td>🐑 <b>sheep</b></td><td>A machine in the flock. Only ever dials <em>out</em>. Holds nothing but its own key.</td></tr>
-    <tr><td>📡 <b>connector</b></td><td>A blind relay and address book. The only one that needs a reachable address. It forwards ciphertext it cannot read.</td></tr>
+    <tr><td>📡 <b>connector</b></td><td>A blind relay and address book, and a member of the flock like anything else. The only role needing a reachable address — and it can be any machine.</td></tr>
   </table>
 
   <h2>Install</h2>
@@ -38,18 +38,16 @@
   <p class="muted">Static binaries for Linux, macOS and Windows, amd64 and arm64. Nothing to install alongside it.</p>
 
   <h2>Use</h2>
-  <p>On the machine that will be your 👑 master:</p>
-  <pre><code>ssheep init --name myflock</code><button class="copy">copy</button></pre>
-  <p>On a machine with a reachable address — a small VPS is the usual choice:</p>
-  <pre><code>ssheep connector --listen :7000</code><button class="copy">copy</button></pre>
-  <p>Then, back on the 👑 master:</p>
-  <pre><code>ssheep connector add --addr &lt;that machine&gt;:7000
-ssheep invite --name pi --out pi.ticket</code><button class="copy">copy</button></pre>
-  <p>Copy <code>pi.ticket</code> to the new machine, put the binary there too, and run:</p>
-  <pre><code>ssheep sheep --invite-file pi.ticket --install-only</code><button class="copy">copy</button></pre>
-  <p>Now it is in the flock:</p>
+  <p>On the machine you will control the flock from — the 👑 master:</p>
+  <pre><code>ssheep master</code><button class="copy">copy</button></pre>
+  <p>That sets everything up and prints two things. Paste the first on every machine
+  you want in the flock — one ticket each:</p>
+  <pre><code>ssheep sheep "H4sIAAAA…"</code><button class="copy">copy</button></pre>
+  <p>And the second on the one machine with a public address, usually a small VPS:</p>
+  <pre><code>ssheep connector "H4sIAAAA…"</code><button class="copy">copy</button></pre>
+  <p>That is the whole setup. The connector tells the master where it is, so there is
+  no address or fingerprint to copy anywhere. Then:</p>
   <pre><code>ssheep see
-ssheep run --name pi -- uptime
 ssheep run --all -- uptime</code><button class="copy">copy</button></pre>
 
   <h2>For humans</h2>
