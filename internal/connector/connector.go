@@ -206,7 +206,38 @@ func (s *Server) adopt(sr *flock.SignedRoster) (*flockState, bool, error) {
 		_ = peer.Send(p.conn, proto.Wrap(proto.TypeError, proto.ErrMsg{Message: "you are no longer in the roster"}))
 		_ = p.conn.Close()
 	}
+	if changed {
+		st.announce(sr)
+	}
 	return st, changed, nil
+}
+
+// announce hands the new roster to everyone in the flock.
+//
+// Without this a machine that has been connected for weeks only ever learns
+// about a change when it happens to reconnect, so adding a connector would do
+// nothing for it until a restart.
+func (st *flockState) announce(sr *flock.SignedRoster) {
+	body, err := json.Marshal(sr)
+	if err != nil {
+		return
+	}
+	env := &proto.Envelope{Type: proto.TypeRoster, Body: body}
+	for _, p := range st.peerList() {
+		if err := peer.Send(p.conn, env); err != nil {
+			log.Printf("connector: could not tell %s about the new roster: %v", p.name, err)
+		}
+	}
+}
+
+func (st *flockState) peerList() []*session {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	out := make([]*session, 0, len(st.peers))
+	for _, p := range st.peers {
+		out = append(out, p)
+	}
+	return out
 }
 
 func (st *flockState) setRoster(sr *flock.SignedRoster, r flock.Roster) ([]*session, bool) {

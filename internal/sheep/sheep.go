@@ -75,11 +75,6 @@ func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 	if m == nil {
 		return errors.New("sheep: this machine is not in the roster")
 	}
-	connectors, err := roster.ConnectorsFor(connectorAddr)
-	if err != nil {
-		return err
-	}
-
 	a := &Agent{
 		id:         id,
 		name:       m.Name,
@@ -88,27 +83,17 @@ func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 		roster:     roster,
 		signed:     sr,
 		rosterPath: rosterPath,
+		only:       connectorAddr,
+		links:      map[string]*runner{},
 		stop:       make(chan struct{}),
 	}
-	log.Printf("sheep: %s (%s) in flock %q (%s), %d connector(s)", a.name, a.id, roster.Name, a.flock, len(connectors))
+	log.Printf("sheep: %s (%s) in flock %q (%s)", a.name, a.id, roster.Name, a.flock)
+	a.syncConnectors()
 
-	var wg sync.WaitGroup
-	for _, c := range connectors {
-		wg.Add(1)
-		go func(c flock.Connector) {
-			defer wg.Done()
-			a.follow(c)
-		}(c)
-	}
-	done := make(chan struct{})
-	go func() { wg.Wait(); close(done) }()
-
-	select {
-	case <-a.stop:
-		return errors.New(a.haltReason)
-	case <-done:
-		return nil
-	}
+	// Links come and go as the flock changes, so there is nothing to wait for
+	// except a reason to stop.
+	<-a.stop
+	return errors.New(a.haltReason)
 }
 
 // Agent is a joined machine.
@@ -123,10 +108,100 @@ type Agent struct {
 	signed *flock.SignedRoster
 
 	rosterPath string
+	only       string // if set, use only this connector
+
+	linkMu sync.Mutex
+	links  map[string]*runner
 
 	stopOnce   sync.Once
 	stop       chan struct{}
 	haltReason string
+}
+
+// runner keeps one connector link alive, and can be told to stop.
+type runner struct {
+	conn   flock.Connector
+	cancel chan struct{}
+
+	mu   sync.Mutex
+	live *frame.Conn
+}
+
+// stop ends a link promptly: closing the connection unblocks the read that is
+// otherwise sitting there waiting for a message that will never come.
+func (r *runner) stop() {
+	close(r.cancel)
+	r.mu.Lock()
+	if r.live != nil {
+		_ = r.live.Close()
+	}
+	r.mu.Unlock()
+}
+
+func (r *runner) setLive(c *frame.Conn) {
+	r.mu.Lock()
+	r.live = c
+	r.mu.Unlock()
+}
+
+func (r *runner) cancelled() bool {
+	select {
+	case <-r.cancel:
+		return true
+	default:
+		return false
+	}
+}
+
+// syncConnectors makes the links that are running match the flock's current
+// connectors.
+//
+// A flock can grow a connector, drop one, or move one -- a connector that
+// regenerated its certificate needs a new fingerprint -- and a machine that has
+// been up for weeks should follow all of that without being restarted.
+func (a *Agent) syncConnectors() {
+	want, err := a.currentRoster().ConnectorsFor(a.only)
+	if err != nil {
+		want = nil
+	}
+	desired := make(map[string]flock.Connector, len(want))
+	for _, c := range want {
+		desired[c.Addr] = c
+	}
+
+	a.linkMu.Lock()
+	var stopped []string
+	for addr, r := range a.links {
+		d, keep := desired[addr]
+		if keep && d.Pin == r.conn.Pin {
+			continue
+		}
+		r.stop()
+		delete(a.links, addr)
+		stopped = append(stopped, addr)
+	}
+	var started []flock.Connector
+	for addr, c := range desired {
+		if _, running := a.links[addr]; running {
+			continue
+		}
+		r := &runner{conn: c, cancel: make(chan struct{})}
+		a.links[addr] = r
+		started = append(started, c)
+		go a.follow(r)
+	}
+	live := len(a.links)
+	a.linkMu.Unlock()
+
+	for _, addr := range stopped {
+		log.Printf("sheep: no longer using connector %s", addr)
+	}
+	for _, c := range started {
+		log.Printf("sheep: following connector %s", c.Addr)
+	}
+	if live == 0 {
+		log.Printf("sheep: this flock has no connector at the moment; waiting for one")
+	}
 }
 
 // identity is what this machine presents to a connector.
@@ -169,26 +244,28 @@ func (a *Agent) member(id string) *flock.Member {
 }
 
 // follow keeps one connector link alive, backing off if the connector is down.
-func (a *Agent) follow(c flock.Connector) {
+func (a *Agent) follow(r *runner) {
 	const maxBackoff = 30 * time.Second
 	backoff := 2 * time.Second
 	for {
 		started := time.Now()
-		err := a.serveConnector(c)
+		err := a.serveConnector(r)
 
 		if err != nil {
 			if errors.Is(err, errRevoked) {
-				a.halt(fmt.Sprintf("sheep: %s refused this machine: %v", c.Addr, err))
+				a.halt(fmt.Sprintf("sheep: %s refused this machine: %v", r.conn.Addr, err))
 				return
 			}
 			if time.Since(started) > maxBackoff {
 				backoff = 2 * time.Second // it was healthy for a while; start over
 			}
-			log.Printf("sheep: connector %s: %v (retrying in %s)", c.Addr, err, backoff)
+			log.Printf("sheep: connector %s: %v (retrying in %s)", r.conn.Addr, err, backoff)
 		}
 
 		select {
 		case <-a.stop:
+			return
+		case <-r.cancel:
 			return
 		case <-time.After(backoff):
 		}
@@ -201,8 +278,9 @@ func (a *Agent) follow(c flock.Connector) {
 	}
 }
 
-// serveConnector holds one connection until it breaks.
-func (a *Agent) serveConnector(c flock.Connector) error {
+// serveConnector holds one connection until it breaks or the link is stopped.
+func (a *Agent) serveConnector(r *runner) error {
+	c := r.conn
 	conn, err := peer.Dial(c.Addr, c.Pin, a.identity(), 15*time.Second)
 	if err != nil {
 		if strings.Contains(err.Error(), "roster") || strings.Contains(err.Error(), "not in the") {
@@ -211,6 +289,11 @@ func (a *Agent) serveConnector(c flock.Connector) error {
 		return err
 	}
 	defer conn.Close()
+	r.setLive(conn)
+	defer r.setLive(nil)
+	if r.cancelled() {
+		return nil
+	}
 
 	l := &link{addr: c.Addr, conn: conn, sessions: map[string]*tunnel.Session{}}
 	log.Printf("sheep: connected to %s", c.Addr)
@@ -272,6 +355,8 @@ func (a *Agent) adoptRoster(env *proto.Envelope) {
 			log.Printf("sheep: could not save the roster: %v", err)
 		}
 	}
+	// The flock may have gained, lost or moved a connector. Follow it.
+	a.syncConnectors()
 }
 
 // link is one live connection to one connector. Sessions live here rather than
