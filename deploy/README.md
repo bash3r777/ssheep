@@ -46,6 +46,32 @@ If it is compromised, the attacker learns who talks to whom and nothing else. If
 it is lost, nothing is lost with it: stand up another, and point the flock at
 its address.
 
+## Donating a relay
+
+A machine with a good network position can serve strangers. Start it with
+`--public` and it will take on any flock whose roster proves itself, without
+being told about a single one of them in advance.
+
+```sh
+sshepard connector --public --listen :7000 \
+  --max-flocks 100 --max-conns 2000 --max-members 1000
+```
+
+What that means, stated plainly:
+
+- It sees **metadata** for every flock it serves: which machines are talking,
+  when, and what they are called. It never sees a command or its output.
+- It forwards ciphertext it cannot inspect, so what it carries is not its
+  business — but the bandwidth and the abuse complaints are.
+- Limits are yours. Per-flock quotas do not exist yet, so a total cap is all
+  there is to stop one flock being the noisy one.
+
+A relay is a good citizen by default: no connection logs, and nothing written
+about who talked to whom.
+
+The connector unit already runs as a `DynamicUser` with a state directory. For a
+public relay, add `--public` and the limits to `ExecStart`.
+
 ## A sheep
 
 ```sh

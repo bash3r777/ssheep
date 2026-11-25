@@ -67,6 +67,21 @@ func NodeID(pub []byte) string {
 	return strings.ToLower(enc)
 }
 
+// FlockID derives a short, stable id from the flock's public key.
+//
+// A relay that serves strangers needs to tell one flock from another, and it
+// must be able to do that without being told anything it has to trust. Deriving
+// the id from the key means a flock cannot claim an id it does not own: the
+// only way to be flock X is to be able to sign as flock X.
+func FlockID(pub []byte) string {
+	sum := sha256.Sum256(pub)
+	enc := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:8])
+	return strings.ToLower(enc)
+}
+
+// ID is this flock's identifier.
+func (r Roster) ID() string { return FlockID(r.FlockKey) }
+
 // SignRoster signs a roster with the flock key.
 func SignRoster(r Roster, priv ed25519.PrivateKey) (*SignedRoster, error) {
 	b, err := json.Marshal(r)

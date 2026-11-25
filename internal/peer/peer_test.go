@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -30,18 +31,21 @@ func TestRouteToSetsTheTargetOnTheEnvelope(t *testing.T) {
 	}
 }
 
-func TestAuthMessageBindsIdentityAndNonce(t *testing.T) {
+func TestAuthMessageBindsFlockIdentityAndNonce(t *testing.T) {
 	nonce := []byte("0123456789abcdef")
-	a := AuthMessage("node-a", nonce)
-	b := AuthMessage("node-b", nonce)
-	if string(a) == string(b) {
-		t.Fatal("two different machines produce the same authentication message")
+	base := AuthMessage("flock-1", "node-a", nonce)
+
+	cases := map[string][]byte{
+		"another machine":   AuthMessage("flock-1", "node-b", nonce),
+		"another flock":     AuthMessage("flock-2", "node-a", nonce),
+		"another challenge": AuthMessage("flock-1", "node-a", []byte("fedcba9876543210")),
 	}
-	c := AuthMessage("node-a", []byte("fedcba9876543210"))
-	if string(a) == string(c) {
-		t.Fatal("the nonce is not part of the authentication message")
+	for what, got := range cases {
+		if bytes.Equal(base, got) {
+			t.Fatalf("%s produced the same authentication message", what)
+		}
 	}
-	if len(a) < len(proto.AuthContext)+len(nonce) {
-		t.Fatalf("authentication message is too short: %d", len(a))
+	if uint(len(base)) < uint(len(proto.AuthContext)+len(nonce)) {
+		t.Fatalf("authentication message is too short: %d", len(base))
 	}
 }

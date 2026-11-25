@@ -80,8 +80,17 @@ func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 		return err
 	}
 
-	a := &Agent{id: id, name: m.Name, key: key, roster: roster, stop: make(chan struct{})}
-	log.Printf("sheep: %s (%s) in flock %q, %d connector(s)", a.name, a.id, roster.Name, len(connectors))
+	a := &Agent{
+		id:         id,
+		name:       m.Name,
+		key:        key,
+		flock:      roster.ID(),
+		roster:     roster,
+		signed:     sr,
+		rosterPath: rosterPath,
+		stop:       make(chan struct{}),
+	}
+	log.Printf("sheep: %s (%s) in flock %q (%s), %d connector(s)", a.name, a.id, roster.Name, a.flock, len(connectors))
 
 	var wg sync.WaitGroup
 	for _, c := range connectors {
@@ -104,16 +113,39 @@ func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 
 // Agent is a joined machine.
 type Agent struct {
-	id   string
-	name string
-	key  *flock.KeyFile
+	id    string
+	name  string
+	key   *flock.KeyFile
+	flock string
 
 	rmu    sync.RWMutex
 	roster flock.Roster
+	signed *flock.SignedRoster
+
+	rosterPath string
 
 	stopOnce   sync.Once
 	stop       chan struct{}
 	haltReason string
+}
+
+// identity is what this machine presents to a connector.
+func (a *Agent) identity() peer.Identity {
+	a.rmu.RLock()
+	defer a.rmu.RUnlock()
+	return peer.Identity{
+		Flock:  a.flock,
+		NodeID: a.id,
+		Key:    a.key.SignKey(),
+		Roster: a.signed,
+	}
+}
+
+func (a *Agent) setRoster(r flock.Roster, sr *flock.SignedRoster) {
+	a.rmu.Lock()
+	a.signed = sr
+	a.roster = r
+	a.rmu.Unlock()
 }
 
 // halt stops every connector link for good, and records why.
@@ -128,12 +160,6 @@ func (a *Agent) currentRoster() flock.Roster {
 	a.rmu.RLock()
 	defer a.rmu.RUnlock()
 	return a.roster
-}
-
-func (a *Agent) setRoster(r flock.Roster) {
-	a.rmu.Lock()
-	a.roster = r
-	a.rmu.Unlock()
 }
 
 func (a *Agent) member(id string) *flock.Member {
@@ -177,7 +203,7 @@ func (a *Agent) follow(c flock.Connector) {
 
 // serveConnector holds one connection until it breaks.
 func (a *Agent) serveConnector(c flock.Connector) error {
-	conn, err := peer.Dial(c.Addr, c.Pin, a.id, a.key.SignKey(), 15*time.Second)
+	conn, err := peer.Dial(c.Addr, c.Pin, a.identity(), 15*time.Second)
 	if err != nil {
 		if strings.Contains(err.Error(), "roster") || strings.Contains(err.Error(), "not in the") {
 			return fmt.Errorf("%w (%v)", errRevoked, err)
@@ -230,11 +256,22 @@ func (a *Agent) adoptRoster(env *proto.Envelope) {
 		log.Printf("sheep: ignoring a roster that does not verify: %v", err)
 		return
 	}
-	if cur := a.currentRoster(); !bytes.Equal(cur.FlockKey, r.FlockKey) {
+	cur := a.currentRoster()
+	if !bytes.Equal(cur.FlockKey, r.FlockKey) {
 		log.Printf("sheep: ignoring a roster signed by a different flock")
 		return
 	}
-	a.setRoster(r)
+	if r.Version <= cur.Version {
+		return
+	}
+	a.setRoster(r, &sr)
+	if a.rosterPath != "" {
+		// Keep the newest copy on disk, so a restart does not resurrect a
+		// roster that has been superseded.
+		if err := sr.Save(a.rosterPath); err != nil {
+			log.Printf("sheep: could not save the roster: %v", err)
+		}
+	}
 }
 
 // link is one live connection to one connector. Sessions live here rather than

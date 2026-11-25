@@ -44,9 +44,10 @@ operator hands it over deliberately.
    its public key to the roster, re-signs the roster and prints a ticket.
 2. The ticket goes to the new machine, which installs two files: its own private
    key, and a copy of the roster.
-3. The machine connects to the connector, which challenges it to sign a random
-   nonce. The connector checks that signature against the roster. No secret is
-   ever sent to the connector.
+3. The machine connects to a connector, which challenges it to sign a random
+   nonce, and the signature is checked against the roster. The roster travels
+   with the authentication message, so a connector that has never met the flock
+   learns it in the same breath. No secret is ever sent to the connector.
 4. From then on it is simply *in*.
 
 The ticket is single use in the sense that it carries a key pair. `sshepard
@@ -58,8 +59,8 @@ It can:
 
 - verify that a connecting machine holds the key the roster says it holds
 - see who is connected, and route between them
-- adopt a roster published by a shepherd, after checking the signature and that
-  it belongs to the same flock
+- take on a flock it has never seen, when the flock offers a roster that proves
+  itself — but only if it was started with `--public`
 - tell a machine it is no longer welcome, and close its connection
 
 It cannot:
@@ -67,7 +68,8 @@ It cannot:
 - read a command, or the output of one
 - forge a command, or impersonate a member
 - add itself to the flock
-- accept a roster signed by anybody other than this flock's key
+- accept a roster signed by anybody other than that flock's key
+- route between flocks, or tell one flock about another
 
 Every payload the connector forwards is encrypted between shepherd and sheep
 using keys it never sees. So running a connector on somebody else's machine is
@@ -79,8 +81,8 @@ Two layers.
 
 **Connector layer.** Length-prefixed JSON envelopes. `challenge`, `auth`,
 `ready`, `list`, `listreply`, `route`, `data`, `roster`. The connector reads
-only the envelope — who is asking and who they want to reach. The payload
-inside a `route` is opaque to it.
+only the envelope — who is asking and who they want to reach, plus the flock id
+and the roster that proves it. The payload inside a `route` is opaque to it.
 
 **Session layer.** Between a shepherd and a sheep, inside those opaque payloads.
 Each side generates an ephemeral X25519 key, signs it with its permanent Ed25519
@@ -109,6 +111,32 @@ revocation instant in a peer-to-peer network is a hard problem, and for now the
 answer is that the connector is the chokepoint, so revoking works for as long as
 the connector is in the path.
 
+## One relay, many flocks
+
+A connector can serve many flocks at once. That is what makes a donated relay
+possible: one machine in a good network position can serve a hundred strangers
+without having been told about any of them in advance.
+
+- **A flock's id comes from its key** — `FlockID(flockKey)`. A flock therefore
+  cannot claim an id it cannot sign for, and nothing has to hand ids out.
+- **Peers are held per flock**, and routing only ever looks inside the sender's
+  own flock. One flock cannot reach another's machines even if a node id
+  collides.
+- **Enrolment is self-certifying.** The signed roster rides along with the
+  authentication message. The relay checks it and trusts nothing in advance:
+  no signup, no account, nothing to approve.
+
+Adopting the offered roster *before* checking the signature is deliberate. A
+machine added in version 3 cannot authenticate against a relay still holding
+version 1, so the relay has to accept the newer roster first. The reverse case
+is what protects revocation: a relay holding version 4 refuses a revoked machine
+offering the version 3 roster that still listed it.
+
+A relay serves only the flock it was given unless it is started with `--public`.
+Serving strangers is a decision worth making out loud, and the limits — how many
+flocks, how many connections, how many members — belong to whoever is paying for
+the bandwidth.
+
 ## More than one connector
 
 A single connector is a single point of failure: its bad afternoon becomes the
@@ -136,12 +164,15 @@ can end it.
 
 ## Deliberate omissions
 
-- **Direct connections.** Today every byte goes through the connector. IPv6,
+- **Direct connections.** Today every byte goes through a connector. IPv6,
   UPnP and hole punching are all upgrades that sit *on top of* the relay rather
   than replacing it — the relay stays as the fallback that always works.
 - **Interactive shells.** `run` executes and streams output; there is no pty and
   no stdin yet.
 - **File transfer.** `copy` is not implemented.
-- **A connector that boots with nothing.** A connector needs a roster before it
-  can authenticate anyone, so the very first one is handed a roster by hand.
-  After that the flock keeps it up to date on its own.
+- **The public relay pool.** A relay can already serve many flocks and learn
+  them from the flocks themselves. What does not exist yet is the directory of
+  volunteers and the client-side selection that would use one by default.
+- **Per-flock quotas.** A relay can cap flocks, connections and members in
+  total, but not per flock, so one member of the community could still be the
+  noisy one.

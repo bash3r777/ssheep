@@ -176,6 +176,35 @@ func TestNodeIDIsStableAndShort(t *testing.T) {
 	}
 }
 
+// A relay tells one flock from another by an id derived from the flock key. If
+// that id could be chosen rather than derived, a stranger could claim a flock
+// they cannot sign for.
+func TestFlockIDIsDerivedFromTheKey(t *testing.T) {
+	a, _ := testRoster(t)
+	b, _ := testRoster(t)
+
+	if a.ID() != a.ID() {
+		t.Fatal("a flock's id is not stable")
+	}
+	if a.ID() == b.ID() {
+		t.Fatal("two different flocks share an id")
+	}
+	if a.ID() != FlockID(a.FlockKey) {
+		t.Fatal("Roster.ID does not agree with FlockID")
+	}
+	if len(a.ID()) != 13 {
+		t.Fatalf("flock id = %q (%d chars), want 13", a.ID(), len(a.ID()))
+	}
+
+	// The id must follow the key, not the name: two flocks called the same
+	// thing are still different flocks.
+	c := b
+	c.Name = a.Name
+	if c.ID() == a.ID() {
+		t.Fatal("the id follows the name rather than the key")
+	}
+}
+
 func TestRosterRemove(t *testing.T) {
 	r, _ := testRoster(t)
 	if !r.Remove("a-sheep") {

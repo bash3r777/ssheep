@@ -1,5 +1,6 @@
 // Package peer is the client side of the connector protocol: connect, prove
-// identity, then send and receive frames.
+// identity, and — if the connector has never met this flock — hand over the
+// roster that proves who may join it.
 package peer
 
 import (
@@ -8,14 +9,28 @@ import (
 	"fmt"
 	"time"
 
+	"sshepard.com/internal/flock"
 	"sshepard.com/internal/frame"
 	"sshepard.com/internal/netx"
 	"sshepard.com/internal/proto"
 )
 
-// Dial connects to a connector, proves this machine's identity and returns an
-// authenticated, framed connection.
-func Dial(addr, pin, id string, priv ed25519.PrivateKey, timeout time.Duration) (*frame.Conn, error) {
+// Identity is who this machine is, as far as a connector is concerned.
+type Identity struct {
+	Flock  string // the flock's id, derived from the flock key
+	NodeID string
+	Key    ed25519.PrivateKey
+
+	// Roster is offered to a relay that has never seen this flock. Because it
+	// is signed by the flock key, the relay can check it while trusting
+	// nothing in advance — which is what lets an open relay work without a
+	// registration authority.
+	Roster *flock.SignedRoster
+}
+
+// Dial connects, proves this machine's identity, and hands over the flock if the
+// connector does not know it yet.
+func Dial(addr, pin string, who Identity, timeout time.Duration) (*frame.Conn, error) {
 	nc, err := netx.DialPinned(addr, pin, timeout)
 	if err != nil {
 		return nil, err
@@ -37,8 +52,22 @@ func Dial(addr, pin, id string, priv ed25519.PrivateKey, timeout time.Duration) 
 	if err := env.Decode(&ch); err != nil {
 		return fail(err)
 	}
-	sig := ed25519.Sign(priv, AuthMessage(id, ch.Nonce))
-	if err := Send(f, proto.Wrap(proto.TypeAuth, proto.Auth{ID: id, Sig: sig})); err != nil {
+
+	sig := ed25519.Sign(who.Key, AuthMessage(who.Flock, who.NodeID, ch.Nonce))
+	auth := proto.Auth{Flock: who.Flock, ID: who.NodeID, Sig: sig}
+	if who.Roster != nil {
+		// The roster rides along so a relay can learn a flock it has never met
+		// and refresh one it has. It is sent on every connection, which is
+		// chattier than it needs to be for very large flocks: the relay could
+		// say "I already know, and mine is newer" and save the round trip. Worth
+		// doing when flocks are big; not worth the extra protocol for now.
+		offered, err := json.Marshal(who.Roster)
+		if err != nil {
+			return fail(err)
+		}
+		auth.Roster = offered
+	}
+	if err := Send(f, proto.Wrap(proto.TypeAuth, auth)); err != nil {
 		return fail(err)
 	}
 
@@ -57,10 +86,9 @@ func Dial(addr, pin, id string, priv ed25519.PrivateKey, timeout time.Duration) 
 	return f, nil
 }
 
-// AuthMessage is what a machine signs to prove it holds its private key. The
-// context prefix stops a signature made for one purpose being replayed as another.
-func AuthMessage(id string, nonce []byte) []byte {
-	return append([]byte(proto.AuthContext+id+"|"), nonce...)
+// AuthMessage is what a machine signs to prove it holds its private key.
+func AuthMessage(flockID, nodeID string, nonce []byte) []byte {
+	return append([]byte(proto.AuthContext+flockID+"|"+nodeID+"|"), nonce...)
 }
 
 // Send writes one envelope.

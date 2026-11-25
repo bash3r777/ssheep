@@ -8,20 +8,19 @@ import "encoding/json"
 
 // Envelope types.
 const (
-	TypeChallenge  = "challenge"  // connector -> peer: prove you own your key
-	TypeAuth       = "auth"       // peer -> connector: signed challenge
-	TypeReady      = "ready"      // connector -> peer: you are in
-	TypeList       = "list"       // peer -> connector: who is there?
-	TypeListReply  = "listreply"  // connector -> peer: the flock, with presence
-	TypeRoute      = "route"      // peer -> connector: deliver this to someone
-	TypeData       = "data"       // connector -> peer: someone sent you this
-	TypeRoster     = "roster"     // connector -> peer: the current signed roster
-	TypeRosterPush = "rosterpush" // shepherd -> connector: adopt this roster
-	TypeError      = "error"
+	TypeChallenge = "challenge" // connector -> peer: prove you own your key
+	TypeAuth      = "auth"      // peer -> connector: signed challenge, plus the roster
+	TypeReady     = "ready"     // connector -> peer: you are in
+	TypeList      = "list"      // peer -> connector: who is there?
+	TypeListReply = "listreply" // connector -> peer: the flock, with presence
+	TypeRoute     = "route"     // peer -> connector: deliver this to someone
+	TypeData      = "data"      // connector -> peer: someone sent you this
+	TypeRoster    = "roster"    // connector -> peer: the current signed roster
+	TypeError     = "error"
 )
 
-// AuthContext prefixes every authentication signature so a signature made for
-// one purpose can never be replayed as another.
+// AuthContext prefixes the authentication signature, so a signature made for one
+// purpose can never be replayed as another.
 const AuthContext = "sshepard-auth|"
 
 // Envelope is the only thing a connector parses.
@@ -58,10 +57,17 @@ type Challenge struct {
 	Nonce []byte `json:"nonce"`
 }
 
-// Auth is the signed answer to a challenge.
+// Auth is the signed answer to a challenge. Flock says which flock this machine
+// belongs to, so one relay can serve many.
+//
+// It carries the roster too. That is what lets a relay learn a flock it has
+// never met, and refresh one it has: the roster is signed by the flock key, so
+// the relay can believe it while trusting nothing in advance.
 type Auth struct {
-	ID  string `json:"id"`
-	Sig []byte `json:"sig"`
+	Flock  string          `json:"flock"`
+	ID     string          `json:"id"`
+	Sig    []byte          `json:"sig"`
+	Roster json.RawMessage `json:"roster,omitempty"`
 }
 
 // Ready acknowledges a successful join.
@@ -80,6 +86,8 @@ type MemberStatus struct {
 // ListReply is the answer to a list request.
 type ListReply struct {
 	Version uint64         `json:"version"`
+	Flock   string         `json:"flock,omitempty"`
+	Name    string         `json:"name,omitempty"`
 	Members []MemberStatus `json:"members"`
 }
 

@@ -33,6 +33,7 @@ type Client struct {
 	name      string
 	priv      ed25519.PrivateKey
 	roster    flock.Roster
+	signed    *flock.SignedRoster
 
 	mu      sync.Mutex
 	wires   map[string]*peerChan
@@ -74,7 +75,8 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn, serving, err := dialAny(connectors, id, key.SignKey())
+	who := peer.Identity{Flock: roster.ID(), NodeID: id, Key: key.SignKey(), Roster: sr}
+	conn, serving, err := dialAny(connectors, who)
 	if err != nil {
 		return nil, err
 	}
@@ -85,6 +87,7 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 		name:      m.Name,
 		priv:      key.SignKey(),
 		roster:    roster,
+		signed:    sr,
 		wires:     map[string]*peerChan{},
 		replies:   make(chan *proto.Envelope, 4),
 		closed:    make(chan struct{}),
@@ -100,10 +103,10 @@ const dialTimeout = 5 * time.Second
 // dialAny tries each connector in preference order and returns the first that
 // accepts us. Losing a connector should mean a slower first attempt, not a
 // broken flock.
-func dialAny(connectors []flock.Connector, id string, priv ed25519.PrivateKey) (*frame.Conn, string, error) {
+func dialAny(connectors []flock.Connector, who peer.Identity) (*frame.Conn, string, error) {
 	var lastErr error
 	for _, c := range connectors {
-		conn, err := peer.Dial(c.Addr, c.Pin, id, priv, dialTimeout)
+		conn, err := peer.Dial(c.Addr, c.Pin, who, dialTimeout)
 		if err == nil {
 			return conn, c.Addr, nil
 		}
@@ -194,22 +197,23 @@ func (c *Client) deliver(id string, f func(*peerChan) bool) bool {
 }
 
 // List asks the connector who is in the flock and who is online.
-func (c *Client) List(timeout time.Duration) ([]proto.MemberStatus, error) {
+func (c *Client) List(timeout time.Duration) (proto.ListReply, error) {
+	var empty proto.ListReply
 	if err := peer.Send(c.conn, proto.Wrap(proto.TypeList, nil)); err != nil {
-		return nil, err
+		return empty, err
 	}
 	select {
 	case env := <-c.replies:
 		var r proto.ListReply
 		if err := env.Decode(&r); err != nil {
-			return nil, err
+			return empty, err
 		}
 		sort.Slice(r.Members, func(i, j int) bool { return r.Members[i].Name < r.Members[j].Name })
-		return r.Members, nil
+		return r, nil
 	case <-time.After(timeout):
-		return nil, errors.New("shepherd: the connector did not answer")
+		return empty, errors.New("shepherd: the connector did not answer")
 	case <-c.closed:
-		return nil, errors.New("shepherd: lost the connector")
+		return empty, errors.New("shepherd: lost the connector")
 	}
 }
 
@@ -358,11 +362,12 @@ func (c *Client) sendWire(to string, w *tunnel.Wire) error {
 	return peer.Send(c.conn, peer.RouteTo(to, raw))
 }
 
-// Publish pushes the current roster to every connector in it.
+// Publish hands the current roster to every connector in it.
 //
-// The roster is a file, but it is not the operator's job to copy it around. Any
-// shepherd may publish it, and a connector only believes a roster that is signed
-// by the flock key it already trusts.
+// The roster is a file, but it is not the operator's job to copy it around.
+// Any member can hand a relay its flock, because the roster proves itself: it is
+// signed by the flock key, and the sender has to prove it belongs to it. That is
+// also what lets a flock join a relay the relay has never heard of.
 func Publish(rosterPath, nodeKeyPath string) (pushed int, err error) {
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
@@ -381,45 +386,27 @@ func Publish(rosterPath, nodeKeyPath string) (pushed int, err error) {
 	}
 	id := flock.NodeID(key.SignPub())
 	m := roster.Find(id)
-	if m == nil || m.Role != flock.RoleShepherd {
-		return 0, errors.New("shepherd: only a shepherd machine can publish the roster")
+	if m == nil {
+		return 0, errors.New("shepherd: this machine is not in the roster")
 	}
 
+	// Connecting is publishing. A connector that already knows the flock just
+	// authenticates us; one that has never seen it asks for the roster, and the
+	// handshake hands it over.
+	who := peer.Identity{Flock: roster.ID(), NodeID: id, Key: key.SignKey(), Roster: sr}
 	var firstErr error
 	for _, cn := range roster.Connectors {
-		if err := publishTo(cn, id, key.SignKey(), sr); err != nil {
+		conn, err := peer.Dial(cn.Addr, cn.Pin, who, dialTimeout)
+		if err != nil {
 			if firstErr == nil {
-				firstErr = err
+				firstErr = fmt.Errorf("%s: %w", cn.Addr, err)
 			}
 			continue
 		}
+		conn.Close()
 		pushed++
 	}
 	return pushed, firstErr
-}
-
-func publishTo(cn flock.Connector, id string, priv ed25519.PrivateKey, sr *flock.SignedRoster) error {
-	conn, err := peer.Dial(cn.Addr, cn.Pin, id, priv, 10*time.Second)
-	if err != nil {
-		return fmt.Errorf("%s: %w", cn.Addr, err)
-	}
-	defer conn.Close()
-	if err := peer.Send(conn, proto.Wrap(proto.TypeRosterPush, sr)); err != nil {
-		return fmt.Errorf("%s: %w", cn.Addr, err)
-	}
-	env, err := peer.Read(conn)
-	if err != nil {
-		return fmt.Errorf("%s: %w", cn.Addr, err)
-	}
-	if env.Type != proto.TypeReady {
-		var e proto.ErrMsg
-		_ = env.Decode(&e)
-		if e.Message == "" {
-			e.Message = env.Type
-		}
-		return fmt.Errorf("%s: %s", cn.Addr, e.Message)
-	}
-	return nil
 }
 
 // lineWriter prefixes every line, so output from several machines stays readable.

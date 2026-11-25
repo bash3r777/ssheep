@@ -19,7 +19,7 @@ only secret is your authority key, which you keep offline and never share.
 | Role | What it does | Holds secrets | Must be reachable |
 |---|---|---|---|
 | `shepherd` | Mints invites, issues commands, holds the authority key | yes — the flock key | no |
-| `connector` | Address book and relay. Blind by design. | no | yes |
+| `connector` | Address book and relay. Blind by design, and can serve many flocks. | no | yes |
 | `sheep` | Does the work | only its own key | no |
 
 Roles are hats, not programs. A machine that happens to be reachable can also act
@@ -77,14 +77,14 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how it works underneath.
 
 ## Status
 
-Early, but working end to end: identity, invites, connectors, the relay path,
-`see`, `run` on one machine or all of them, revocation, and failover across
-more than one connector.
+Early, but working end to end: identity, invites, connectors, failover across
+more than one of them, many flocks on one relay, the relay path, `see`, `run` on
+one machine or all of them, and revocation.
 
-Next: multi-flock connectors (so one relay can serve several flocks) and the
-public relay pool, so a new user with no public IP anywhere can still join.
-Direct connections — IPv6, UPnP, hole punching — sit on top of the relay rather
-than replacing it: the relay stays as the fallback that always works.
+Next: the public relay pool — a signed directory of volunteers plus client-side
+selection — so a new user with no public IP anywhere can still join. Direct
+connections (IPv6, UPnP, hole punching) sit on top of the relay rather than
+replacing it: the relay stays as the fallback that always works.
 
 ## License
 

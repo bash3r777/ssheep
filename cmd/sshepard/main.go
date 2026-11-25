@@ -18,6 +18,7 @@ import (
 	"sshepard.com/internal/flock"
 	"sshepard.com/internal/invite"
 	"sshepard.com/internal/netx"
+	"sshepard.com/internal/peer"
 	"sshepard.com/internal/sheep"
 	"sshepard.com/internal/shepherd"
 )
@@ -192,8 +193,6 @@ func cmdInvite(args []string) error {
 	name := fs.String("name", "", "name for the new machine (required)")
 	role := fs.String("role", flock.RoleSheep, "sheep or shepherd")
 	out := fs.String("out", "", "also write the invite to this file")
-	connAddr := fs.String("connector", "", "add this connector (host:port) to the flock")
-	connPin := fs.String("pin", "", `fingerprint of --connector, or "auto" to fetch it`)
 	dir := fs.String("dir", "", "where keys and the roster live")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -219,20 +218,9 @@ func cmdInvite(args []string) error {
 		return err
 	}
 
-	if *connAddr != "" {
-		pin := *connPin
-		if pin == "auto" || pin == "" {
-			fmt.Fprintf(os.Stderr, "sshepard: asking %s for its fingerprint...\n", *connAddr)
-			pin, err = netx.FetchPin(*connAddr, 10*time.Second)
-			if err != nil {
-				return fmt.Errorf("invite: could not read the connector's fingerprint: %w", err)
-			}
-		}
-		r.UpsertConnector(flock.Connector{Addr: *connAddr, Pin: pin})
-		fmt.Printf("using connector %s (%s)\n", *connAddr, short(pin))
-	} else if len(r.Connectors) == 0 {
+	if len(r.Connectors) == 0 {
 		fmt.Fprintf(os.Stderr, "sshepard: note: this flock has no connector, so a new machine has nowhere to connect.\n")
-		fmt.Fprintf(os.Stderr, "         add one with --connector <addr> --pin <fingerprint>.\n")
+		fmt.Fprintf(os.Stderr, "         add one with: sshepard connector add --addr <host:port>\n")
 	}
 
 	newMachine, err := flock.NewKeyFile()
@@ -319,9 +307,13 @@ func cmdConnector(args []string) error {
 	listen := fs.String("listen", ":7000", "address to listen on")
 	advertise := fs.String("advertise", "", "address others should use to reach this connector (default: as --listen)")
 	dir := fs.String("dir", "", "where keys and the roster live")
-	rosterFlag := fs.String("roster", "", "path to the roster")
+	rosterFlag := fs.String("roster", "", "path to a roster to serve from startup")
 	certFlag := fs.String("cert", "", "TLS certificate path")
 	keyFlag := fs.String("key", "", "TLS key path")
+	public := fs.Bool("public", false, "serve any flock that can prove itself, not only your own")
+	maxFlocks := fs.Int("max-flocks", 100, "refuse new flocks beyond this many (0 = no limit)")
+	maxConns := fs.Int("max-conns", 2000, "refuse new connections beyond this many (0 = no limit)")
+	maxMembers := fs.Int("max-members", 1000, "refuse a roster with more members than this (0 = no limit)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -337,7 +329,15 @@ func cmdConnector(args []string) error {
 		keyPath = flock.Dir() + "/connector.key"
 	}
 
-	srv, err := connector.New(rosterPath, certPath, keyPath)
+	srv, err := connector.New(connector.Config{
+		RosterPath: rosterPath,
+		CertPath:   certPath,
+		KeyPath:    keyPath,
+		Public:     *public,
+		MaxFlocks:  *maxFlocks,
+		MaxConns:   *maxConns,
+		MaxMembers: *maxMembers,
+	})
 	if err != nil {
 		return err
 	}
@@ -346,8 +346,15 @@ func cmdConnector(args []string) error {
 		addr = advertiseAddr(*listen)
 	}
 	fmt.Printf("this connector's fingerprint:\n\n  %s\n\n", srv.Pin())
+	if *public {
+		fmt.Printf("this connector is public: it will serve any flock whose roster proves itself,\n")
+		fmt.Printf("within %d flock(s) and %d connection(s). It never sees what it carries.\n\n", *maxFlocks, *maxConns)
+	} else {
+		fmt.Printf("this connector serves only the flock it was given. Add --public to serve any flock\n")
+		fmt.Printf("that can prove itself, which is what a community relay does.\n\n")
+	}
 	fmt.Printf("add it to the flock from the shepherd machine with:\n\n")
-	fmt.Printf("  sshepard invite --name <machine> --connector %s --pin %s\n\n", addr, srv.Pin())
+	fmt.Printf("  sshepard connector add --addr %s\n\n", addr)
 	if addr == *listen {
 		fmt.Printf("(set --advertise <host:port> if that is not the address others will use)\n\n")
 	}
@@ -444,6 +451,25 @@ func cmdConnectorAdd(args []string) error {
 			return fmt.Errorf("connector add: could not reach %s: %w\n  start it first, or pass --pin <fingerprint>", *addr, err)
 		}
 	}
+
+	// Ask it to serve this flock before writing it down. A connector that would
+	// refuse us is worse than no connector at all: it would sit in the roster
+	// looking like redundancy we do not actually have.
+	nodeKey, err := flock.LoadKeyFile(nodeKeyPath)
+	if err != nil {
+		return fmt.Errorf("connector add: %w", err)
+	}
+	probe := peer.Identity{
+		Flock:  r.ID(),
+		NodeID: flock.NodeID(nodeKey.SignPub()),
+		Key:    nodeKey.SignKey(),
+		Roster: sr,
+	}
+	conn, err := peer.Dial(*addr, p, probe, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("connector add: %s will not serve this flock: %w\n  if it is yours, start it with --public, or give it this flock's roster", *addr, err)
+	}
+	conn.Close()
 
 	replacing := false
 	for _, c := range r.Connectors {
@@ -609,14 +635,14 @@ func cmdSee(args []string) error {
 	}
 	defer c.Close()
 
-	members, err := c.List(10 * time.Second)
+	reply, err := c.List(10 * time.Second)
 	if err != nil {
 		return err
 	}
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "NAME\tROLE\tSTATUS\tID")
 	online := 0
-	for _, m := range members {
+	for _, m := range reply.Members {
 		status := "offline"
 		if m.Online {
 			status = "online"
@@ -627,7 +653,10 @@ func cmdSee(args []string) error {
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	fmt.Printf("\n%d of %d machines online\n", online, len(members))
+	fmt.Printf("\n%d of %d machines online\n", online, len(reply.Members))
+	if reply.Name != "" {
+		fmt.Printf("flock %q (%s)\n", reply.Name, reply.Flock)
+	}
 	if n := len(c.Connectors()); n > 1 {
 		fmt.Printf("via %s (of %d connectors)\n", c.Connector(), n)
 	}
