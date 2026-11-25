@@ -1,0 +1,15 @@
+# Build output
+/bin/
+/dist/
+
+# Local state — never commit keys or invites
+*.key
+*.key.json
+*.pem
+*.invite.json
+*.invite
+/sshepard
+
+# Editor / OS noise
+.DS_Store
+*.swp
