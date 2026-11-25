@@ -6,9 +6,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Install the invite first:
-#   ssheep sheep --dir /var/lib/ssheep --invite-file /root/pi.invite.json
-ExecStart=/usr/local/bin/ssheep sheep --dir /var/lib/ssheep
+# Install the ticket first:
+#   ssheep sheep "<ticket>" --install-only
+Environment=SSHEEP_DIR=/var/lib/ssheep
+ExecStart=/usr/local/bin/ssheep sheep
 Restart=always
 RestartSec=5
 

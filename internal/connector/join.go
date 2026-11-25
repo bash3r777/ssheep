@@ -18,44 +18,44 @@ import (
 	"ssheep.xyz/internal/proto"
 )
 
-// Join runs this machine as a connector for its flock.
+// Enrolled is one flock this machine is a connector for.
+type Enrolled struct {
+	Name       string
+	RosterPath string
+	NodePath   string
+}
+
+// Join runs this machine as a connector for every flock it is enrolled in.
 //
-// Two things happen at once. A relay starts serving, and this machine sits in the
-// flock as a member so that it can tell the other connectors where it is. That
-// second part is what removes the last manual step of setting up: nobody has to
-// carry an address or a fingerprint to the master by hand.
+// One relay, one port, several flocks. The relay already keeps flocks apart, so
+// being reachable for three of them costs what being reachable for one costs.
+// Each flock is announced separately, because each has its own connectors and
+// its own roster.
 //
-// The address is worked out the honest way: this machine asks the flock what it
-// looks like from outside, and offers itself at that address plus its listening
-// port. If it sits behind a NAT with no port forwarding, the master will try it,
-// fail, and say so — and then --addr is there to be told the truth.
-func Join(rosterPath, nodeKeyPath, addr string, port int, public bool) error {
-	sr, err := flock.LoadSignedRoster(rosterPath)
-	if err != nil {
-		return err
+// The address is worked out the honest way: this machine asks a flock what it
+// looks like from outside, and offers itself at that address on its listening
+// port. Behind a NAT with no port forwarding that guess is wrong, the master
+// will say so, and then --addr is there to be told the truth.
+func Join(flocks []Enrolled, addr string, port int, public bool) error {
+	if len(flocks) == 0 {
+		return errors.New("connector: this machine is not a connector for any flock")
 	}
-	roster, err := sr.Verify()
-	if err != nil {
-		return err
-	}
-	key, err := flock.LoadKeyFile(nodeKeyPath)
-	if err != nil {
-		return err
-	}
-	id := flock.NodeID(key.SignPub())
-	m := roster.Find(id)
-	if m == nil {
-		return errors.New("connector: this machine is not in the roster")
-	}
-	if m.Role != flock.RoleConnector {
-		return fmt.Errorf("connector: this machine is enrolled as a %s, not a connector\n  mint a connector ticket with: ssheep master --invite", m.Role)
+	paths := make([]string, 0, len(flocks))
+	names := make([]string, 0, len(flocks))
+	for _, f := range flocks {
+		if err := checkEnrolled(f); err != nil {
+			return err
+		}
+		paths = append(paths, f.RosterPath)
+		names = append(names, f.Name)
 	}
 
-	dir := filepath.Dir(rosterPath)
 	srv, err := New(Config{
-		RosterPath: rosterPath,
-		CertPath:   filepath.Join(dir, "connector.crt"),
-		KeyPath:    filepath.Join(dir, "connector.key"),
+		RosterPaths: paths,
+		// One certificate for the whole machine: every flock is reached at the
+		// same address, so they share one fingerprint.
+		CertPath:   filepath.Join(flock.Dir(), "connector.crt"),
+		KeyPath:    filepath.Join(flock.Dir(), "connector.key"),
 		Public:     public,
 		MaxFlocks:  100,
 		MaxConns:   2000,
@@ -78,19 +78,48 @@ func Join(rosterPath, nodeKeyPath, addr string, port int, public bool) error {
 
 	fmt.Printf("\n📡  relay running on %s\n", listen)
 	fmt.Printf("    fingerprint %s\n", srv.Pin())
-	fmt.Printf("    telling the rest of the flock about itself\n")
+	for _, n := range names {
+		fmt.Printf("    serving flock %q\n", n)
+	}
 
-	go announceForever(rosterPath, nodeKeyPath, srv.Pin(), addr, port)
-
+	for _, f := range flocks {
+		go announceForever(f, srv.Pin(), addr, port)
+	}
 	select {}
 }
 
-// announceForever keeps this relay registered for as long as it is up.
-func announceForever(rosterPath, nodeKeyPath, pin, addrOverride string, port int) {
+// checkEnrolled makes sure the machine really is a connector for this flock,
+// before it starts advertising itself as one.
+func checkEnrolled(f Enrolled) error {
+	sr, err := flock.LoadSignedRoster(f.RosterPath)
+	if err != nil {
+		return err
+	}
+	roster, err := sr.Verify()
+	if err != nil {
+		return err
+	}
+	key, err := flock.LoadKeyFile(f.NodePath)
+	if err != nil {
+		return err
+	}
+	m := roster.Find(flock.NodeID(key.SignPub()))
+	if m == nil {
+		return fmt.Errorf("connector: this machine is not in flock %q", f.Name)
+	}
+	if m.Role != flock.RoleConnector {
+		return fmt.Errorf("connector: this machine is a %s in flock %q, not a connector\n  mint a connector ticket with: ssheep master %q", m.Role, f.Name, f.Name)
+	}
+	return nil
+}
+
+// announceForever keeps one flock's registration fresh for as long as this relay
+// is up.
+func announceForever(f Enrolled, pin, addrOverride string, port int) {
 	delay := 5 * time.Second
 	for {
-		if err := announce(rosterPath, nodeKeyPath, pin, addrOverride, port); err != nil {
-			log.Printf("connector: %v", err)
+		if err := announce(f, pin, addrOverride, port); err != nil {
+			log.Printf("connector: flock %s: %v", f.Name, err)
 			if delay < 2*time.Minute {
 				delay *= 2
 			}
@@ -101,14 +130,14 @@ func announceForever(rosterPath, nodeKeyPath, pin, addrOverride string, port int
 	}
 }
 
-// announce holds one connection open to a connector of the flock, offering this
+// announce holds one connection open to a connector of this flock, offering this
 // relay and keeping the offer fresh.
 //
-// It stays connected rather than knocking once. That way the flock sees the
+// It stays connected rather than knocking once: that way the flock sees the
 // connector as online while its relay is up, and roster changes reach it without
 // waiting for the next announcement.
-func announce(rosterPath, nodeKeyPath, pin, addrOverride string, port int) error {
-	sr, err := flock.LoadSignedRoster(rosterPath)
+func announce(f Enrolled, pin, addrOverride string, port int) error {
+	sr, err := flock.LoadSignedRoster(f.RosterPath)
 	if err != nil {
 		return err
 	}
@@ -116,7 +145,7 @@ func announce(rosterPath, nodeKeyPath, pin, addrOverride string, port int) error
 	if err != nil {
 		return err
 	}
-	key, err := flock.LoadKeyFile(nodeKeyPath)
+	key, err := flock.LoadKeyFile(f.NodePath)
 	if err != nil {
 		return err
 	}
@@ -162,7 +191,7 @@ func announce(rosterPath, nodeKeyPath, pin, addrOverride string, port int) error
 			lastErr = err
 			continue
 		}
-		log.Printf("connector: %s knows this relay is at %s", c.Addr, myAddr)
+		log.Printf("connector: flock %s: %s knows this relay is at %s", f.Name, c.Addr, myAddr)
 
 		next := time.Now().Add(5 * time.Minute)
 		for {
@@ -189,11 +218,11 @@ func announce(rosterPath, nodeKeyPath, pin, addrOverride string, port int) error
 			}
 			switch env.Type {
 			case proto.TypeRoster:
-				adoptRoster(env, rosterPath, roster)
+				adoptRoster(env, f.RosterPath, roster)
 			case proto.TypeError:
 				var e proto.ErrMsg
 				_ = env.Decode(&e)
-				log.Printf("connector: %s: %s", c.Addr, e.Message)
+				log.Printf("connector: flock %s: %s: %s", f.Name, c.Addr, e.Message)
 			}
 		}
 	}

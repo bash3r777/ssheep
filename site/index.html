@@ -15,19 +15,22 @@
 <body>
 
 <div class="vibe">
-  <span class="bot"><span class="arm">🦾</span><span class="head">🤖</span><span class="arm flip">🦾</span></span>
   <span class="hot">100% Vibe Coded!</span>
-  <span>· early prototype, no audit, not secure ·</span>
+  <span class="bot"><span class="arm">🦾</span><span class="head">🤖</span><span class="arm flip">🦾</span></span>
+  <span>early prototype, no audit, not secure</span>
+  <span>·</span>
   <a href="/about">how it works</a>
 </div>
 
-<div class="wrap">
+<div class="v3">
 
-  <header class="head"><h1 class="big">ssheep</h1></header>
+  <header class="v3head">
+    <h1 class="big"><span class="sheep">🐑</span> SSHeep <span class="sheep">🐑</span></h1>
+  </header>
 
-  <div class="grid">
+  <div class="v3grid">
 
-    <div class="col">
+    <div class="pitch">
       <p class="lede">Every machine you own, wherever it is — a laptop, a VPS, a box under a
       desk — in one flock. No open ports, no account, and not one server you have to trust.</p>
 
@@ -39,115 +42,131 @@
         <a href="https://github.com/bash3r777/ssheep">Source</a>
       </div>
 
-      <h2>What you get</h2>
+      <p class="fhead">Features</p>
       <ul class="feat">
-        <li><span class="ic">🐑</span><span>Every machine you own, in one flock, whatever network each one is on</span></li>
-        <li><span class="ic">🔓</span><span>No open ports, no port forwarding, no public IP on the machines you manage</span></li>
-        <li><span class="ic">🔑</span><span>One key to keep. It signs who is in — and never has to be online</span></li>
-        <li><span class="ic">🙈</span><span>The relay forwards ciphertext it cannot read, forge, or open</span></li>
-        <li><span class="ic">📡</span><span>Any reachable machine can be a connector, and losing one costs you nothing</span></li>
-        <li><span class="ic">🧰</span><span>One static binary, no dependencies, nothing to install alongside it</span></li>
+        <li><span class="ic">🐑</span>Every machine you own, one flock</li>
+        <li><span class="ic">🔓</span>No open ports, no port forwarding</li>
+        <li><span class="ic">🔑</span>One key per flock, and it stays offline</li>
+        <li><span class="ic">🙈</span>The relay cannot read a thing</li>
+        <li><span class="ic">🗂</span>Many flocks, and a machine can be in several</li>
+        <li><span class="ic">📡</span>Any reachable machine can be the connector</li>
+        <li><span class="ic">🚫</span>Revoke a machine with one command</li>
+        <li><span class="ic">🧰</span>One static binary, no dependencies</li>
       </ul>
     </div>
 
-    <div class="col">
-      <h2>Use — three steps</h2>
-      <div class="win">
-        <div class="tbar"><i class="dt r"></i><i class="dt y"></i><i class="dt g"></i><span class="tt">ssheep — set up a flock</span></div>
-        <div class="tbody"><pre><span class="c">step 1</span>  <span class="m">on the machine you control from:</span>
-<span class="p">$</span> ssheep master
-<span class="g">👑</span>  master ready — flock "myflock"
-    connectors  relay.ssheep.xyz:7000
+    <div class="v3side">
+      <div class="term"><div class="win">
+        <div class="tbar"><i class="dt r"></i><i class="dt y"></i><i class="dt g"></i><span class="tt">ssheep</span></div>
+        <div class="termbody"><pre class="dash"><span class="c">step 1</span>  Install SSHeep:
+<span class="p">curl</span> -fsSL https://ssheep.xyz/install.sh | sh
 
-    run this on each machine you want in the flock:
-      <span class="g">ssheep sheep "H4sIAAAA…"</span>
-    run this on the machine with a public address:
-      <span class="g">ssheep connector "H4sIAAAA…"</span>
+<span class="c">step 2</span>  Create the Master <span class="g">👑</span>:
+<span class="p">$</span> ssheep master flock "myflock"
+    <span class="g">👑</span>  master ready — flock "myflock" created
 
-<span class="c">step 2</span>  <span class="m">paste that, on each machine:</span>
-<span class="p">$</span> ssheep sheep "H4sIAAAA…"
-<span class="g">🐑</span>  this machine is in the flock
+    <span class="g">🐑</span> run this on each machine you want to be a Sheep <span class="g">🐑</span>:
+      curl -fsSL https://ssheep.xyz/install.sh | sh &amp;&amp; ssheep sheep "H4sIAAAA…"
 
-<span class="c">step 3</span>  <span class="m">back on the master:</span>
-<span class="p">$</span> ssheep run --all -- uptime
+    <span class="g">📡</span> run this on each machine you want to be a Connector <span class="g">📡</span>:
+      curl -fsSL https://ssheep.xyz/install.sh | sh &amp;&amp; ssheep connector "H4sIAAAA…"
+
+<span class="c">step 3</span>  Command the flock:
+<span class="p">$</span> ssheep run "myflock" -- uptime
 sheep-1|  14:22:01 up 3 days,  2:14,  load average: 0.08
 sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
 <span class="c">❯</span> <span class="cur"></span></pre></div>
       </div>
-      <p class="muted" style="font-size:12.5px">That is the whole setup. The connector works out its own address and tells the
-      flock, so there is nothing to copy between machines but the ticket itself.</p>
+    </div>
+
     </div>
 
   </div>
 
-  <h2>How it fits together</h2>
+  <p class="fhead" style="margin-top:36px">How it fits together</p>
   <div class="diagram">
-    <svg class="dg" viewBox="0 0 1000 320" role="img" aria-label="A master and many sheep all dialling out to connectors in the middle. Nothing listens for connections except the connectors.">
+    <svg class="dg" viewBox="0 0 1000 430" role="img"
+         aria-label="A master holding the key, above two flocks. Each flock has connectors and sheep, everything dials out, and one machine can be in both flocks.">
 
-      <!-- wires -->
-      <path class="wire" d="M500 56 V100"/>
-      <path class="wire" d="M180 100 H820"/>
-      <path class="wire" d="M180 100 V140"/><path class="wire" d="M500 100 V140"/><path class="wire" d="M820 100 V140"/>
-      <path class="wire" d="M180 180 V220"/><path class="wire" d="M500 180 V220"/><path class="wire" d="M820 180 V220"/>
-      <path class="wire" d="M70 220 H930"/>
-      <path class="wire" d="M70 220 V262"/><path class="wire" d="M290 220 V262"/>
-      <path class="wire" d="M390 220 V262"/><path class="wire" d="M610 220 V262"/>
-      <path class="wire" d="M710 220 V262"/><path class="wire" d="M930 220 V262"/>
+      <!-- master -->
+      <rect class="box master" x="400" y="10" width="200" height="44" rx="7"/>
+      <text x="500" y="33" text-anchor="middle" dominant-baseline="middle">👑 master</text>
+      <text class="lbl" x="392" y="33" text-anchor="end" dominant-baseline="middle">holds the key →</text>
+      <circle class="dot" cx="586" cy="31" r="3"/>
 
-      <!-- the direction of travel: outbound, always outbound -->
-      <path class="flow" d="M180 140 V100 H500"/>
-      <path class="flow" d="M820 140 V100 H500"/>
-      <path class="flow" d="M70 220 H180 V180"/>
-      <path class="flow" d="M930 220 H820 V180"/>
-
-      <!-- arrowheads into the connectors -->
+      <!-- master down to both flocks -->
+      <path class="wire" d="M500 54 V74"/>
+      <path class="wire" d="M245 74 H755"/>
+      <path class="wire" d="M245 74 V131"/>
+      <path class="wire" d="M755 74 V131"/>
+      <path class="flow" d="M245 125 V74 H500"/>
+      <path class="flow" d="M755 125 V74 H500"/>
       <g fill="#33465e">
-        <polygon points="180,140 175,130 185,130"/>
-        <polygon points="500,140 495,130 505,130"/>
-        <polygon points="820,140 815,130 825,130"/>
-        <polygon points="180,180 175,190 185,190"/>
-        <polygon points="500,180 495,190 505,190"/>
-        <polygon points="820,180 815,190 825,190"/>
+        <polygon points="245,131 240,121 250,121"/>
+        <polygon points="755,131 750,121 760,121"/>
       </g>
 
-      <!-- nodes -->
-      <rect class="box box-master" x="410" y="16" width="180" height="40"/>
-      <text x="500" y="37" text-anchor="middle" dominant-baseline="middle">👑 master</text>
+      <!-- two flocks -->
+      <rect class="flockbox" x="30" y="96" width="430" height="214" rx="10"/>
+      <text class="fname" x="46" y="118">flock "alpha"</text>
+      <rect class="flockbox" x="540" y="96" width="430" height="214" rx="10"/>
+      <text class="fname" x="556" y="118">flock "beta"</text>
 
-      <rect class="box" x="105" y="140" width="150" height="40"/>
-      <rect class="box" x="425" y="140" width="150" height="40"/>
-      <rect class="box" x="745" y="140" width="150" height="40"/>
-      <text x="180" y="161" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
-      <text x="500" y="161" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
-      <text x="820" y="161" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
+      <!-- connectors -->
+      <rect class="box" x="170" y="131" width="150" height="38" rx="6"/>
+      <text x="245" y="151" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
+      <rect class="box" x="680" y="131" width="150" height="38" rx="6"/>
+      <text x="755" y="151" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
 
-      <rect class="box" x="15" y="262" width="110" height="34"/>
-      <rect class="box" x="235" y="262" width="110" height="34"/>
-      <rect class="box" x="335" y="262" width="110" height="34"/>
-      <rect class="box" x="555" y="262" width="110" height="34"/>
-      <rect class="box" x="655" y="262" width="110" height="34"/>
-      <rect class="box" x="875" y="262" width="110" height="34"/>
-      <text x="70" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
-      <text x="290" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
-      <text x="390" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
-      <text x="610" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
-      <text x="710" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
-      <text x="930" y="280" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <!-- sheep, three per flock -->
+      <path class="wire" d="M95 215 H395 M95 215 V250 M245 215 V250 M395 215 V250 M245 215 V169"/>
+      <path class="wire" d="M605 215 H905 M605 215 V250 M755 215 V250 M905 215 V250 M755 215 V169"/>
+      <path class="flow" d="M95 215 H245 V175"/>
+      <path class="flow" d="M905 215 H755 V175"/>
+      <g fill="#33465e">
+        <polygon points="245,169 240,179 250,179"/>
+        <polygon points="755,169 750,179 760,179"/>
+      </g>
 
-      <!-- labels -->
-      <text class="lbl" x="410" y="37" text-anchor="end" dominant-baseline="middle">you hold the key →</text>
-      <text class="lbl" x="100" y="161" text-anchor="end" dominant-baseline="middle">blind relays</text>
-      <text class="lbl" x="500" y="312" text-anchor="middle">every line is an outbound connection — only the connectors are reachable at all</text>
+      <rect class="box" x="43" y="250" width="104" height="32" rx="6"/>
+      <rect class="box" x="193" y="250" width="104" height="32" rx="6"/>
+      <rect class="box" x="343" y="250" width="104" height="32" rx="6"/>
+      <text x="95" y="267" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="245" y="267" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="395" y="267" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
 
-      <!-- the master is the only thing awake, so mark it -->
-      <circle class="dot" cx="566" cy="36" r="3"/>
+      <rect class="box" x="553" y="250" width="104" height="32" rx="6"/>
+      <rect class="box" x="703" y="250" width="104" height="32" rx="6"/>
+      <rect class="box" x="853" y="250" width="104" height="32" rx="6"/>
+      <text x="605" y="267" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="755" y="267" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+      <text x="905" y="267" text-anchor="middle" dominant-baseline="middle">🐑 sheep</text>
+
+      <!-- one machine, in both flocks -->
+      <path class="wire" d="M500 366 V336"/>
+      <path class="wire" d="M245 336 H755"/>
+      <path class="wire" d="M245 336 V310"/>
+      <path class="wire" d="M755 336 V310"/>
+      <g fill="#33465e">
+        <polygon points="245,310 240,320 250,320"/>
+        <polygon points="755,310 750,320 760,320"/>
+      </g>
+      <rect class="box master" x="390" y="366" width="220" height="42" rx="7"/>
+      <text x="500" y="388" text-anchor="middle" dominant-baseline="middle">🐑 the same machine 🐑</text>
+      <text class="lbl" x="500" y="422" text-anchor="middle">a machine can be a sheep — or a connector — in as many flocks as you like</text>
     </svg>
   </div>
-  <p class="muted" style="font-size:12.5px">The master and the sheep both dial <em>out</em> to a connector; nothing on them ever
-  listens. A connector checks that each machine holds the key the roster says it holds, then
-  forwards opaque payloads between them — it can see who is talking, never what about.</p>
 
-  <footer>
+  <ul class="cap">
+    <li><span class="ic">🚀</span>run a command on every sheep at once</li>
+    <li><span class="ic">👀</span>see every machine, live, in one screen</li>
+    <li><span class="ic">🚫</span>revoke a machine, and it is out in seconds</li>
+    <li><span class="ic">🗂</span>as many flocks as you like, on the same machine</li>
+    <li><span class="ic">🛟</span>more than one connector: losing one costs nothing</li>
+    <li><span class="ic">📴</span>the flock is a file — no server to maintain</li>
+  </ul>
+
+  <footer class="foot">
     <a href="/about">about</a>
     <a href="https://github.com/bash3r777/ssheep/releases/latest">download</a>
     <a href="https://github.com/bash3r777/ssheep">source</a>

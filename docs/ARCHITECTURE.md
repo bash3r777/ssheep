@@ -40,8 +40,9 @@ operator hands it over deliberately.
 
 ## Joining
 
-1. `ssheep invite --name pi` generates a key pair for the new machine, adds
-   its public key to the roster, re-signs the roster and prints a ticket.
+1. `ssheep master flock "<name>"` (or `ssheep invite --name pi` by hand) generates
+   a key pair for the new machine, adds its public key to the roster, re-signs the
+   roster and prints a ticket.
 2. The ticket goes to the new machine, which installs two files: its own private
    key, and a copy of the roster.
 3. The machine connects to a connector, which challenges it to sign a random
@@ -110,6 +111,29 @@ never consults the connector cannot be interrupted by a roster change. Making
 revocation instant in a peer-to-peer network is a hard problem, and for now the
 answer is that the connector is the chokepoint, so revoking works for as long as
 the connector is in the path.
+
+## One machine, many flocks
+
+A machine is not tied to a flock, and a flock is not tied to a machine.
+
+- **State is per flock.** Everything a machine knows lives under
+  `~/.ssheep/flocks/<name>/`: its identity there (`node.key.json`), the roster
+  (`roster.json`), and the flock key if this machine holds it (`flock.key.json`).
+  A machine in two flocks runs two agents side by side; losing one — being
+  revoked from a flock, say — leaves the other alone.
+- **One key per flock, and it comes from the ticket.** A ticket is minted before
+  the machine it is meant for has ever been spoken to, so the private key has to
+  be carried by the ticket. That would be a problem if a machine had one identity
+  for everything: a second flock's ticket would overwrite the first. Instead the
+  key belongs to the flock, so a ticket can be minted for a machine nobody has
+  met, and the same box looks like a different machine to each flock it is in.
+- **Roles are per flock too.** A machine can be a sheep in one flock and a
+  connector in another. `ssheep flock list` prints the role this machine holds in
+  each.
+
+`ssheep master flock "<name>"` creates as many flocks as you ask for. Every
+command that takes a flock takes it as the first argument (`ssheep see "work"`,
+`ssheep run "work" -- uptime`); leaving it out means "all of them".
 
 ## One relay, many flocks
 

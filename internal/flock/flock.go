@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -364,7 +365,7 @@ func writeFile(path string, v any, mode os.FileMode) error {
 // Well-known locations
 // ---------------------------------------------------------------------------
 
-// Dir is where a machine keeps its keys and roster copy.
+// Dir is where a machine keeps its keys and its flocks.
 func Dir() string {
 	if d := os.Getenv("SSHEEP_DIR"); d != "" {
 		return d
@@ -376,11 +377,47 @@ func Dir() string {
 	return filepath.Join(home, ".ssheep")
 }
 
-// DefaultRosterPath is the machine's copy of the flock.
-func DefaultRosterPath() string { return filepath.Join(Dir(), "roster.json") }
+// NodeKeyPath is this machine's identity. One identity, used in every flock the
+// machine belongs to: a machine is one thing, whatever it has joined.
+func NodeKeyPath() string { return filepath.Join(Dir(), "node.key.json") }
 
-// DefaultFlockKeyPath is the authority key. Keep it offline.
-func DefaultFlockKeyPath() string { return filepath.Join(Dir(), "flock.key.json") }
+// FlocksRoot is where each flock's own state lives, one directory each.
+func FlocksRoot() string { return filepath.Join(Dir(), "flocks") }
 
-// DefaultNodeKeyPath is this machine's own identity.
-func DefaultNodeKeyPath() string { return filepath.Join(Dir(), "node.key.json") }
+// SafeName turns a flock name into something usable as a directory.
+func SafeName(name string) string {
+	var b strings.Builder
+	last := false
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+			last = false
+		default:
+			if !last {
+				b.WriteByte('-')
+				last = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// FlockDir is where one flock's state lives.
+func FlockDir(name string) string { return filepath.Join(FlocksRoot(), SafeName(name)) }
+
+// FlockNames lists the flock directories this machine has state for.
+func FlockNames() []string {
+	entries, err := os.ReadDir(FlocksRoot())
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names
+}

@@ -9,7 +9,16 @@
 set -eu
 
 repo=bash3r777/ssheep
-dest=${1:-/usr/local/bin/ssheep}
+
+# Where to put it. /usr/local/bin when we can, otherwise the user's own bin, so
+# the one-liner works without sudo on a machine that has never seen this before.
+if [ -n "${1:-}" ]; then
+  dest=$1
+elif [ -w /usr/local/bin ] 2>/dev/null; then
+  dest=/usr/local/bin/ssheep
+else
+  dest=${HOME:-/tmp}/.local/bin/ssheep
+fi
 
 os=$(uname -s | tr 'A-Z' 'a-z')
 case "$os" in
@@ -27,6 +36,7 @@ esac
 url="https://github.com/$repo/releases/latest/download/ssheep-$os-$arch"
 
 echo "ssheep: fetching $url"
+mkdir -p "$(dirname "$dest")"
 if ! curl -fsSL "$url" -o "$dest.tmp" 2>/dev/null; then
   echo "ssheep: download failed." >&2
   echo "ssheep: no release yet? build it instead:" >&2
@@ -37,3 +47,8 @@ chmod 755 "$dest.tmp"
 mv "$dest.tmp" "$dest"
 echo "ssheep: installed $dest"
 "$dest" version
+
+case ":$PATH:" in
+  *":$(dirname "$dest"):"*) ;;
+  *) echo "ssheep: note: $(dirname "$dest") is not in your PATH" ;;
+esac

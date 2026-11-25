@@ -39,9 +39,12 @@ const offerTTL = 24 * time.Hour
 
 // Config describes how a connector should behave.
 type Config struct {
-	RosterPath string // a flock to serve from startup, optionally
-	CertPath   string
-	KeyPath    string
+	// RosterPaths are the flocks to serve from startup, one file each. A public
+	// relay can start with none and learn flocks as they walk up.
+	RosterPaths []string
+
+	CertPath string
+	KeyPath  string
 
 	// Public means: accept flocks this connector has never seen, on the word of
 	// a roster they sign themselves. Off by default, because serving strangers
@@ -87,7 +90,7 @@ type session struct {
 }
 
 // New loads the connector's certificate, generating it on first run, and takes
-// on any flock it was pointed at.
+// on every flock it was pointed at.
 func New(cfg Config) (*Server, error) {
 	cert, err := netx.LoadOrCreateSelfSigned(cfg.CertPath, cfg.KeyPath)
 	if err != nil {
@@ -99,8 +102,8 @@ func New(cfg Config) (*Server, error) {
 	}
 	s := &Server{cfg: cfg, cert: cert, pin: netx.Pin(leaf), flocks: map[string]*flockState{}}
 
-	if cfg.RosterPath != "" {
-		sr, err := flock.LoadSignedRoster(cfg.RosterPath)
+	for _, path := range cfg.RosterPaths {
+		sr, err := flock.LoadSignedRoster(path)
 		switch {
 		case err == nil:
 			st, _, err := s.adopt(sr)
@@ -108,8 +111,8 @@ func New(cfg Config) (*Server, error) {
 				return nil, err
 			}
 			r, _, _ := st.roster()
-			log.Printf("connector: serving flock %s %q from %s (%d members)", st.id, r.Name, cfg.RosterPath, len(r.Members))
-			go s.watchRoster()
+			log.Printf("connector: serving flock %s %q from %s (%d members)", st.id, r.Name, path, len(r.Members))
+			go s.watchRoster(path)
 		case os.IsNotExist(err):
 			// Nothing yet. A public connector can learn flocks later.
 		default:
@@ -156,20 +159,20 @@ func (s *Server) Serve(ln net.Listener) error {
 	}
 }
 
-// watchRoster reloads the startup roster when the file changes, so an operator
-// running a private connector can edit the flock without restarting anything.
-func (s *Server) watchRoster() {
+// watchRoster reloads one roster file when it changes, so an operator running a
+// private connector can edit a flock without restarting anything.
+func (s *Server) watchRoster(path string) {
 	var last time.Time
-	if fi, err := os.Stat(s.cfg.RosterPath); err == nil {
+	if fi, err := os.Stat(path); err == nil {
 		last = fi.ModTime()
 	}
 	for range time.Tick(2 * time.Second) {
-		fi, err := os.Stat(s.cfg.RosterPath)
+		fi, err := os.Stat(path)
 		if err != nil || !fi.ModTime().After(last) {
 			continue
 		}
 		last = fi.ModTime()
-		sr, err := flock.LoadSignedRoster(s.cfg.RosterPath)
+		sr, err := flock.LoadSignedRoster(path)
 		if err != nil {
 			log.Printf("connector: roster reload failed: %v", err)
 			continue
@@ -177,7 +180,7 @@ func (s *Server) watchRoster() {
 		if _, changed, err := s.adopt(sr); err != nil {
 			log.Printf("connector: refusing that roster: %v", err)
 		} else if changed {
-			log.Printf("connector: reloaded %s", s.cfg.RosterPath)
+			log.Printf("connector: reloaded %s", path)
 		}
 	}
 }

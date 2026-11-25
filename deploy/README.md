@@ -14,16 +14,19 @@ systemctl daemon-reload
 Then hand it the ticket that `ssheep master` printed:
 
 ```sh
-ssheep connector "<ticket>" --dir /var/lib/ssheep --install-only
+ssheep connector "<ticket>" --install-only
 systemctl enable --now ssheep-connector
 journalctl -u ssheep-connector | head
 ```
 
-That is all. The service runs `ssheep connector --dir /var/lib/ssheep`, which for
-an enrolled machine means "serve a relay **and** tell the flock where it is". The
-connector works out its own address by asking the flock what it looks like from
-outside, offers itself, and the master accepts it on its next command. Nothing is
-copied by hand.
+That is all. The service runs `ssheep connector`, which for an enrolled machine
+means "serve a relay **and** tell the flock where it is". The state directory is
+`SSHEEP_DIR=/var/lib/ssheep`, set in the unit. The connector works out its own
+address by asking the flock what it looks like from outside, offers itself, and
+the master accepts it on its next command. Nothing is copied by hand.
+
+A connector can be a connector for several flocks at once: install a ticket for
+each, and one relay on one port serves them all.
 
 Behind a NAT with no port forwarding that guess is wrong. The master will say so
 and add nothing; then pass the truth:
@@ -34,7 +37,7 @@ ssheep connector "<ticket>" --addr <the address people really reach you at>:7000
 
 **Run more than one.** Two connectors on different networks turn a bad afternoon
 into a non-event; every sheep holds a link to each of them, and a master falls
-through the list. A second ticket is `ssheep master --invite`.
+through the list. A second ticket is `ssheep master "<flock>" --invite`.
 
 Because the connector is blind, it is the least valuable machine in the flock.
 If it is compromised, the attacker learns who talks to whom and nothing else. If
@@ -76,20 +79,24 @@ install -m 0644 deploy/ssheep-sheep.service /etc/systemd/system/
 systemctl daemon-reload
 
 # one time: the ticket that `ssheep master` printed
-ssheep sheep "<ticket>" --dir /var/lib/ssheep --install-only
+ssheep sheep "<ticket>" --install-only
 
 systemctl enable --now ssheep-sheep
 ```
 
-`--install-only` unpacks the ticket and exits. Without it, `ssheep sheep` installs
-first if there is no identity yet, then serves — so the same line works in a
-provisioning script on a fresh machine and as a no-op on one that is already
+The service runs `ssheep sheep`, with `SSHEEP_DIR=/var/lib/ssheep` set in the
+unit. `--install-only` unpacks the ticket and exits. Without it, `ssheep sheep`
+installs first if there is no identity yet, then serves — so the same line works
+in a provisioning script on a fresh machine and as a no-op on one that is already
 enrolled. It never overwrites an existing identity.
+
+A machine can be a sheep in more than one flock: install another ticket and the
+one process serves all of them.
 
 ## Verifying
 
 ```sh
-ssheep see                      # every machine, and whether it is online
-ssheep run --name sheep-1 -- uptime  # one machine
-ssheep run --all -- uptime      # all of them at once
+ssheep see                              # every flock, and who is online
+ssheep run "<flock>" --name sheep-1 -- uptime  # one machine
+ssheep run "<flock>" -- uptime          # every sheep in a flock
 ```

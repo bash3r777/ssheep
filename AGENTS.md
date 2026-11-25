@@ -15,6 +15,7 @@ relay ("a connector"). One Go binary does all three roles.
 ```
 cmd/ssheep/         the CLI: one file per command group
 internal/flock/     the roster: identity, keys, signing, node and flock ids
+internal/local/     what one machine knows: the flocks it is in, and its key in each
 internal/invite/    single-use tickets (a key pair plus a signed roster), and
                     the one function that unpacks one onto a machine
 internal/frame/     length-prefixed messages over a stream
@@ -33,15 +34,20 @@ static binary with no dependencies is a feature, not an accident.
 
 ## The commands people actually use
 
-`ssheep master` is the whole setup: it creates the flock, pre-adds the project's
-public relay, mints tickets, prints the two lines to paste elsewhere, accepts any
-connector that has registered itself, and reports. Everything it picks is a
-default that a flag can override — the point is that nobody has to read the flags.
+`ssheep master flock "<name>"` is the whole setup: it creates the flock,
+pre-adds the project's public relay, mints tickets, prints the lines to paste
+elsewhere, accepts any connector that has registered itself, and reports.
+Everything it picks is a default that a flag can override — the point is that
+nobody has to read the flags. Run it again with another name for a second flock.
 
 `ssheep sheep "<ticket>"` and `ssheep connector "<ticket>"` are the other two.
 Both take the ticket as a positional argument because that is what people paste.
 With no ticket they carry on doing what the machine is already enrolled as, so a
-restart never changes a machine's role.
+restart never changes a machine's role. A machine can be enrolled in several
+flocks; each is served side by side, with its own key from `internal/local`.
+
+Commands that act on a flock take it as the first positional (`ssheep see work`,
+`ssheep run work -- uptime`), and leaving it out means "all of them".
 
 The older step-by-step commands (`init`, `invite`, `connector add`) still exist
 and still work. Keep them working: they are how somebody takes control when the

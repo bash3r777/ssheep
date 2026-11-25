@@ -14,6 +14,8 @@ WHAT IT IS
     A connector forwards ciphertext it cannot read and cannot forge.
   - The flock is defined by a small signed file (the roster). The only secret is
     the flock key, which signs rosters and is needed only to add or remove a machine.
+  - One machine can be in MANY flocks, each with its own key and roster, and a
+    relay and a connector can serve several flocks at once.
 
 INSTALL
   curl -fsSL https://ssheep.xyz/install.sh | sh
@@ -22,61 +24,75 @@ INSTALL
   #   source:   git clone https://github.com/bash3r777/ssheep && cd ssheep && make build
   # static binaries, linux/darwin/windows, amd64/arm64. no other dependencies.
 
-SETUP — ONE COMMAND, THEN PASTE TWO LINES
+SETUP — ONE COMMAND, THEN PASTE TWO KINDS OF LINE
   1. on the machine you control from (the "master"):
-       ssheep master
-     This creates the flock, pre-generates names and tickets, and prints:
+       ssheep master flock "myflock"
+     This creates the flock, pre-adds the project's public relay, mints tickets,
+     and prints, for each machine to add:
        ssheep sheep "<ticket>"      <- paste one per machine you want in the flock
        ssheep connector "<ticket>"  <- paste on the machine with a public address
-     It also prints the roster, the authority key path, and the connectors.
+     It also reports the flock and accepts any connector that has registered.
 
-  2. paste those lines. Each ticket works once and carries a private key.
-     Nothing else to configure: the connector works out its own address, tells
-     the flock, and the master accepts it on the next command.
+  2. paste those lines (each as printed: `curl ... | sh && ssheep <role> "<ticket>"`).
+     Each ticket works once and carries a private key. Nothing else to configure:
+     the connector works out its own address, tells the flock, and the master
+     accepts it on the next command.
 
   3. on the master:
-       ssheep master --watch 3m     <- optional: watch machines join and register
-       ssheep see                   <- the flock, live
-       ssheep run --all -- uptime
+       ssheep master "myflock" --watch 3m   <- optional: watch machines join
+       ssheep see                           <- all flocks, live
+       ssheep run "myflock" -- uptime
 
   Opinionated defaults, all overridable:
-    flock name      this machine's hostname                       --name
     public relay    relay.ssheep.xyz:7000, pre-added to the roster --relay / --private
     tickets minted  3 sheep, 1 connector                          --sheep N / --connector N
     connector port  7000                                          --port
 
+MULTIPLE FLOCKS
+  A machine can be in as many flocks as you like, and holds a SEPARATE KEY in each.
+  Run `ssheep master flock "<name>"` again for a second one.
+    ssheep flock list            every flock this machine knows, and its role in each
+    ssheep see                   every flock, live
+    ssheep see "myflock"         one flock
+    ssheep run "myflock" -- CMD  run in one flock
+  A machine can be a sheep in one flock and a connector in another. A relay and a
+  connector can serve several flocks at once: one reachable machine, one port. Each
+  flock is entirely separate — its own key, roster, connectors and machine names —
+  so being in a second flock cannot leak anything into the first.
+
 STATE
-  Everything lives in ~/.ssheep (overridden by $SSHEEP_DIR):
-    flock.key.json   the flock key. SENSITIVE. Keep it off the connector.
-    node.key.json    this machine's identity. SENSITIVE.
-    roster.json      the signed roster. Public; safe to share.
+  Everything lives under $SSHEEP_DIR, default ~/.ssheep, one directory per flock:
+    ~/.ssheep/flocks/<name>/flock.key.json   the flock key. SENSITIVE. Off the connector.
+    ~/.ssheep/flocks/<name>/node.key.json    this machine's identity in that flock. SENSITIVE.
+    ~/.ssheep/flocks/<name>/roster.json      the signed roster. Public; safe to share.
   Once enrolled, a machine needs no arguments: `ssheep sheep` and
-  `ssheep connector` know what they are.
+  `ssheep connector` know what they are — and which flocks they are for.
+  (The old `--dir <path>` flag still works; it now just sets $SSHEEP_DIR.)
 
 ROLES
-  master     holds the flock key, mints tickets, sends commands
+  master     holds a flock key, mints tickets, sends commands
   sheep      runs the agent, executes commands
   connector  blind relay + address book; also a member, which is how it tells the
              flock where it is. The only role needing a reachable address.
   One binary does all three; the role is a subcommand.
 
 COMMANDS
-  ssheep master [--name N] [--relay H:PORT] [--private] [--sheep N]
+  ssheep master [flock] <name> [--relay H:PORT] [--private] [--sheep N]
                 [--connector N] [--invite] [--watch 3m]
-                                          set up a whole flock; prints the two lines
+                                          set up a flock; prints the lines to paste
   ssheep sheep "<ticket>"                 join as a sheep and serve
-  ssheep connector "<ticket>"             join as a connector: serve a relay and register it
+  ssheep connector "<ticket>"             join as a connector: serve a relay, register it
                                           (--addr H:PORT if the guessed address is wrong)
-  ssheep see                              the flock, live
-  ssheep run --name NAME -- CMD...        one machine
-  ssheep run --all -- CMD...              every sheep, output prefixed per machine
-  ssheep forget --name NAME               revoke a machine
+  ssheep see [<flock>]                    the flocks, live (all of them by default)
+  ssheep run <flock> -- CMD...            every sheep in one flock
+  ssheep run <flock> --name NAME -- CMD... one machine
+  ssheep forget <flock> --name NAME       revoke a machine
+  ssheep flock list                       the flocks this machine knows
 
   step by step, when you want control:
-  ssheep init --name N                    create a flock by hand
-  ssheep invite --name N [--role R]       mint one ticket (roles: sheep, connector, master)
+  ssheep invite <flock> --name N [--role R]  mint one ticket (roles: sheep, connector, master)
   ssheep connector                        run a relay with no flock of its own
-  ssheep connector add|remove|list        manage connectors by hand
+  ssheep connector add|remove|list        manage a flock's connectors by hand
   ssheep pin --addr H:PORT                print a connector's fingerprint
 
 EXIT CODES AND OUTPUT
@@ -95,6 +111,8 @@ GOTCHAS WORTH KNOWING
   - Online/offline is reported PER CONNECTOR. With several connectors, a machine
     connected to a different one can show as offline.
   - A connector serves only the flock it was given unless started with --public.
+  - A machine in two flocks needs the ticket for EACH; it does not reuse an
+    identity across flocks, by design.
   - Revocation is enforced by connectors; a machine already in a direct conversation
     is not interrupted until it reconnects.
   - Changing a relay's certificate strands its members: they pin the fingerprint

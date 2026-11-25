@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -8,194 +9,174 @@ import (
 
 	"ssheep.xyz/internal/flock"
 	"ssheep.xyz/internal/invite"
+	"ssheep.xyz/internal/local"
 	"ssheep.xyz/internal/master"
 	"ssheep.xyz/internal/netx"
 )
 
-// cmdMaster is the whole setup in one command: create the flock, hand out
-// tickets, and print the two lines somebody has to paste somewhere else.
+// cmdMaster is the whole setup in one command: make a flock, hand out tickets,
+// and print the one line per machine that turns a bare box into part of it.
 //
 // Everything here has a default, and the defaults are meant to work without
 // being read. The flags exist for when they do not.
 func cmdMaster(args []string) error {
+	// The name is a positional, and the word "flock" in front of it is allowed
+	// because that reads better out loud: `ssheep master flock "myflock"`.
+	rest := args
+	var words []string
+	for len(rest) > 0 && !strings.HasPrefix(rest[0], "-") {
+		words = append(words, rest[0])
+		rest = rest[1:]
+	}
+
 	fs := newFlagSet("master")
-	name := fs.String("name", "", "flock name (default: this machine's hostname)")
+	nameFlag := fs.String("name", "", "flock name")
 	relay := fs.String("relay", defaultRelay, `public relay to start with ("" for none)`)
-	private := fs.Bool("private", false, "use only connectors you run yourself")
+	private := fs.Bool("private", false, "no public relay: only connectors you run yourself")
 	sheepN := fs.Int("sheep", defaultSheep, "how many sheep tickets to mint")
-	connN := fs.Int("connector", 1, "how many connector tickets to mint")
-	inviteMore := fs.Bool("invite", false, "mint fresh tickets even though the flock exists")
+	connN := fs.Int("connector", defaultConnector, "how many connector tickets to mint")
+	inviteMore := fs.Bool("invite", false, "mint fresh tickets for a flock that already exists")
 	watch := fs.Duration("watch", 0, "keep watching for machines joining, e.g. --watch 3m")
-	dir := fs.String("dir", "", "where keys and the roster live")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(rest); err != nil {
 		return err
+	}
+	words = append(words, fs.Args()...)
+	if len(words) > 0 && words[0] == "flock" {
+		words = words[1:]
+	}
+	name := *nameFlag
+	if name == "" && len(words) > 0 {
+		name = words[0]
+	}
+	if name == "" {
+		return errors.New(`master: name the flock
+
+  ssheep master flock "myflock"`)
 	}
 	if *private {
 		*relay = ""
 	}
-	rosterPath, flockKeyPath, nodeKeyPath := state(*dir)
 
-	fresh := false
-	if _, err := os.Stat(rosterPath); err != nil {
-		if err := newFlock(rosterPath, flockKeyPath, nodeKeyPath, *name, *relay); err != nil {
+	f, err := local.Resolve(name)
+	created := false
+	switch {
+	case err == nil:
+		// Already here. Carry on from where it is.
+	case strings.Contains(err.Error(), "no flock"):
+		f, err = local.Create(name)
+		if err != nil {
 			return err
 		}
-		fresh = true
-	}
-
-	sr, err := flock.LoadSignedRoster(rosterPath)
-	if err != nil {
-		return err
-	}
-	roster, err := sr.Verify()
-	if err != nil {
+		created = true
+	default:
 		return err
 	}
 
-	fmt.Printf("👑  master ready — flock %q\n\n", roster.Name)
-	fmt.Printf("    roster      %s\n", rosterPath)
-	fmt.Printf("    authority   %s\n", flockKeyPath)
-	fmt.Printf("                keep this offline; it is never needed on a connector\n")
-	if len(roster.Connectors) == 0 {
-		fmt.Printf("    connectors  none yet — start one and it will register itself\n")
-	} else {
-		for i, c := range roster.Connectors {
-			label := "connectors "
-			if i > 0 {
-				label = "           "
+	if created {
+		fmt.Printf("👑  master ready — flock %q created\n", f.Name)
+		if *relay != "" {
+			if err := addRelay(f, *relay); err != nil {
+				fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
 			}
-			fmt.Printf("    %s %s\n", label, c.Addr)
 		}
+	} else {
+		fmt.Printf("👑  master of flock %q\n", f.Name)
 	}
 
-	if fresh || *inviteMore {
-		if err := printTickets(rosterPath, flockKeyPath, *sheepN, *connN); err != nil {
+	if f.Mastered() {
+		acceptOffers(f)
+	}
+	if created || *inviteMore {
+		if err := printTickets(f, *sheepN, *connN); err != nil {
 			return err
 		}
 	}
-
-	// A connector that was started since the last run is waiting to be believed.
-	fmt.Println()
-	if pending, _ := master.PendingOffers(rosterPath, nodeKeyPath, ""); len(pending) > 0 {
-		fmt.Printf("connectors waiting to register:\n")
-		if _, err := master.AcceptOffers(rosterPath, flockKeyPath, nodeKeyPath, "", os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
-		}
-	}
-
-	report(rosterPath, nodeKeyPath, *dir)
+	report(f)
 
 	if *watch > 0 {
-		return watchFlock(rosterPath, flockKeyPath, nodeKeyPath, *dir, *watch)
+		return watchFlock(f, *watch)
 	}
 	return nil
 }
 
-// newFlock creates the flock key, this machine's key, and a roster with a public
-// relay already in it, so the flock works before its owner has done anything
-// else.
-func newFlock(rosterPath, flockKeyPath, nodeKeyPath, name, relay string) error {
-	authority, err := flock.NewKeyFile()
+// addRelay puts the project's public relay into a fresh flock, so the flock
+// works before its owner has run a connector of their own.
+func addRelay(f *local.Flock, addr string) error {
+	pin, err := netx.FetchPin(addr, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("%s did not answer, so the flock starts with no connector yet.\n  run a connector and it will register itself", addr)
+	}
+	authority, err := f.Authority()
 	if err != nil {
 		return err
 	}
-	thisMachine, err := flock.NewKeyFile()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(flock.Dir(), 0o700); err != nil {
-		return err
-	}
-	if err := authority.Save(flockKeyPath); err != nil {
-		return err
-	}
-	if err := thisMachine.Save(nodeKeyPath); err != nil {
-		return err
-	}
-
-	host, _ := os.Hostname()
-	if name == "" {
-		name = host
-	}
-	kex, err := thisMachine.KexPub()
-	if err != nil {
-		return err
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	r := flock.Roster{
-		Version:  1,
-		Name:     name,
-		FlockKey: authority.SignPub(),
-		Members: []flock.Member{{
-			ID:      flock.NodeID(thisMachine.SignPub()),
-			Name:    host,
-			Role:    flock.RoleMaster,
-			SignKey: thisMachine.SignPub(),
-			KexKey:  kex,
-			Added:   now,
-		}},
-		IssuedAt: now,
-	}
-
-	if relay != "" {
-		pin, err := netx.FetchPin(relay, 10*time.Second)
-		switch {
-		case err == nil:
-			r.Connectors = []flock.Connector{{Addr: relay, Pin: pin}}
-		default:
-			fmt.Fprintf(os.Stderr, "ssheep: %s did not answer, so the flock starts with no connector.\n", relay)
-			fmt.Fprintf(os.Stderr, "        Start one with `ssheep connector \"<ticket>\"` and it will register itself.\n\n")
-		}
-	}
-
+	r := f.Roster
+	r.UpsertConnector(flock.Connector{Addr: addr, Pin: pin})
+	r = r.Bump()
 	sr, err := flock.SignRoster(r, authority.SignKey())
 	if err != nil {
 		return err
 	}
-	return sr.Save(rosterPath)
-}
-
-// printTickets mints the tickets and prints the two lines to paste elsewhere.
-func printTickets(rosterPath, flockKeyPath string, sheepN, connN int) error {
-	fmt.Printf("\nRun this on each machine you want in the flock — one ticket each:\n\n")
-	for i := 1; i <= sheepN; i++ {
-		blob, err := mintInvite(rosterPath, flockKeyPath, fmt.Sprintf("sheep-%d", i), flock.RoleSheep)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("    ssheep sheep %q\n", blob)
+	if err := sr.Save(f.RosterPath); err != nil {
+		return err
 	}
-	fmt.Printf("\nRun this on the machine that will be its connector — the one with a public\naddress, usually a small VPS:\n\n")
-	for i := 1; i <= connN; i++ {
-		name := "connector-1"
-		if connN > 1 {
-			name = fmt.Sprintf("connector-%d", i)
-		}
-		blob, err := mintInvite(rosterPath, flockKeyPath, name, flock.RoleConnector)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("    ssheep connector %q\n", blob)
-	}
-	fmt.Printf("\nEach ticket works once, and carries a private key: hand it over privately.\n")
-	if sheepN > 0 {
-		fmt.Printf("Tickets you do not use can be dropped again with `ssheep forget --name sheep-%d`.\n", sheepN)
-	}
-	fmt.Printf("More anytime with `ssheep master --invite`.\n")
+	fmt.Printf("    connector  %s\n", addr)
 	return nil
 }
 
-// mintInvite adds a member and returns a ticket for it.
-func mintInvite(rosterPath, flockKeyPath, name, role string) (string, error) {
-	authority, err := flock.LoadKeyFile(flockKeyPath)
+// printTickets mints the tickets and prints one line per machine to paste.
+func printTickets(f *local.Flock, sheepN, connN int) error {
+	if sheepN > 0 {
+		fmt.Printf("\n🐑 run this on each machine you want to be a Sheep 🐑:\n\n")
+		for i := 1; i <= sheepN; i++ {
+			blob, err := mintInvite(f.Name, fmt.Sprintf("sheep-%d", i), flock.RoleSheep)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  %s\n", ticketLine(flock.RoleSheep, blob))
+		}
+	}
+	if connN > 0 {
+		fmt.Printf("\n📡 run this on each machine you want to be a Connector 📡:\n\n")
+		for i := 1; i <= connN; i++ {
+			name := "connector-1"
+			if connN > 1 {
+				name = fmt.Sprintf("connector-%d", i)
+			}
+			blob, err := mintInvite(f.Name, name, flock.RoleConnector)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("  %s\n", ticketLine(flock.RoleConnector, blob))
+		}
+	}
+	fmt.Printf("\nEach ticket works once, on one machine, and carries that machine's private key.\n")
+	if sheepN > 0 {
+		fmt.Printf("Unused ones can be dropped again with `ssheep forget %q --name sheep-%d`.\n", f.Name, sheepN)
+	}
+	fmt.Printf("More anytime with `ssheep master %q --invite`.\n", f.Name)
+	return nil
+}
+
+// ticketLine is the whole of onboarding in one line: install, then join. It is
+// printed rather than described so it can be copied onto a machine that has
+// nothing on it at all.
+func ticketLine(role, blob string) string {
+	verb := "sheep"
+	if role == flock.RoleConnector {
+		verb = "connector"
+	}
+	return fmt.Sprintf("curl -fsSL %s | sh && ssheep %s %q", joinURL, verb, blob)
+}
+
+// mintInvite adds a member to a flock and returns the ticket for it. It reloads
+// the flock each time, because every mint bumps the roster.
+func mintInvite(flockName, name, role string) (string, error) {
+	f, err := local.Resolve(flockName)
 	if err != nil {
 		return "", err
 	}
-	sr, err := flock.LoadSignedRoster(rosterPath)
-	if err != nil {
-		return "", err
-	}
-	r, err := sr.Verify()
+	authority, err := f.Authority()
 	if err != nil {
 		return "", err
 	}
@@ -208,6 +189,7 @@ func mintInvite(rosterPath, flockKeyPath, name, role string) (string, error) {
 		return "", err
 	}
 	id := flock.NodeID(machine.SignPub())
+	r := f.Roster
 	r.Upsert(flock.Member{
 		ID:      id,
 		Name:    name,
@@ -217,11 +199,11 @@ func mintInvite(rosterPath, flockKeyPath, name, role string) (string, error) {
 		Added:   time.Now().UTC().Truncate(time.Second),
 	})
 	r = r.Bump()
-	sr, err = flock.SignRoster(r, authority.SignKey())
+	sr, err := flock.SignRoster(r, authority.SignKey())
 	if err != nil {
 		return "", err
 	}
-	if err := sr.Save(rosterPath); err != nil {
+	if err := sr.Save(f.RosterPath); err != nil {
 		return "", err
 	}
 	return invite.Encode(&invite.Invite{
@@ -235,45 +217,21 @@ func mintInvite(rosterPath, flockKeyPath, name, role string) (string, error) {
 	})
 }
 
-// argValue finds a flag's value in raw arguments. It exists for the few places
-// that need to know where the state lives before any flag set has parsed it.
-func argValue(args []string, name string) string {
-	for i, a := range args {
-		if a == "--"+name && i+1 < len(args) {
-			return args[i+1]
-		}
-		if v, ok := strings.CutPrefix(a, "--"+name+"="); ok {
-			return v
-		}
+// acceptOffers takes on any connector that has registered itself since last time.
+func acceptOffers(f *local.Flock) {
+	pending, err := master.PendingOffers(f.RosterPath, f.NodePath, "")
+	if err != nil || len(pending) == 0 {
+		return
 	}
-	return ""
+	fmt.Printf("\nconnectors waiting to register in flock %q:\n", f.Name)
+	if _, err := master.AcceptOffers(f.RosterPath, f.KeyPath, f.NodePath, "", os.Stdout); err != nil {
+		fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
+	}
 }
 
-// enrolledRole reports what this machine is enrolled as, or "" if it is not
-// enrolled at all.
-func enrolledRole(dir string) string {
-	rosterPath, _, nodeKeyPath := state(dir)
-	key, err := flock.LoadKeyFile(nodeKeyPath)
-	if err != nil {
-		return ""
-	}
-	sr, err := flock.LoadSignedRoster(rosterPath)
-	if err != nil {
-		return ""
-	}
-	r, err := sr.Verify()
-	if err != nil {
-		return ""
-	}
-	if m := r.Find(flock.NodeID(key.SignPub())); m != nil {
-		return m.Role
-	}
-	return ""
-}
-
-// report prints where the flock stands, without failing if it cannot be reached.
-func report(rosterPath, nodeKeyPath, dir string) {
-	cl, err := open(dir, "")
+// report prints where a flock stands, without failing if it cannot be reached.
+func report(f *local.Flock) {
+	cl, err := master.Open(f.RosterPath, f.NodePath, "")
 	if err != nil {
 		fmt.Printf("\nnot reachable from here right now: %v\n", err)
 		fmt.Printf("start a connector, then run `ssheep see`.\n")
@@ -291,7 +249,7 @@ func report(rosterPath, nodeKeyPath, dir string) {
 			online++
 		}
 	}
-	fmt.Printf("\n%d of %d machines online, via %s\n", online, len(reply.Members), cl.Connector())
+	fmt.Printf("\nflock %q — %d of %d machines online, via %s\n", f.Name, online, len(reply.Members), cl.Connector())
 	for _, m := range reply.Members {
 		mark := " "
 		if m.Online {
@@ -300,26 +258,28 @@ func report(rosterPath, nodeKeyPath, dir string) {
 		fmt.Printf("  %s %-14s %s\n", mark, m.Name, m.Role)
 	}
 	if len(reply.Offers) > 0 {
-		fmt.Printf("\n%d connector(s) waiting to register — run `ssheep master` to accept\n", len(reply.Offers))
+		fmt.Printf("\n%d connector(s) waiting to register — run `ssheep master %q`\n", len(reply.Offers), f.Name)
 	}
 }
 
 // watchFlock keeps accepting connectors and reporting joiners for a while, so
-// pasting the two lines somewhere else has visible feedback here.
-func watchFlock(rosterPath, flockKeyPath, nodeKeyPath, dir string, d time.Duration) error {
-	fmt.Printf("\nwatching for %s — Ctrl-C when you are done\n", d)
+// pasting the lines somewhere else has visible feedback here.
+func watchFlock(f *local.Flock, d time.Duration) error {
+	fmt.Printf("\nwatching flock %q for %s — Ctrl-C when you are done\n", f.Name, d)
 	deadline := time.Now().Add(d)
 	reported := map[string]bool{}
 	for time.Now().Before(deadline) {
 		time.Sleep(3 * time.Second)
 
-		if pending, _ := master.PendingOffers(rosterPath, nodeKeyPath, ""); len(pending) > 0 {
-			if _, err := master.AcceptOffers(rosterPath, flockKeyPath, nodeKeyPath, "", os.Stdout); err != nil {
-				fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
+		if f.Mastered() {
+			if pending, _ := master.PendingOffers(f.RosterPath, f.NodePath, ""); len(pending) > 0 {
+				if _, err := master.AcceptOffers(f.RosterPath, f.KeyPath, f.NodePath, "", os.Stdout); err != nil {
+					fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
+				}
 			}
 		}
 
-		cl, err := open(dir, "")
+		cl, err := master.Open(f.RosterPath, f.NodePath, "")
 		if err != nil {
 			continue
 		}
@@ -335,6 +295,6 @@ func watchFlock(rosterPath, flockKeyPath, nodeKeyPath, dir string, d time.Durati
 			}
 		}
 	}
-	fmt.Printf("\nstopped watching. `ssheep see` shows the flock; `ssheep master` picks\nup any connector that registered meanwhile.\n")
+	fmt.Printf("\nstopped watching. `ssheep see` shows the flock.\n")
 	return nil
 }

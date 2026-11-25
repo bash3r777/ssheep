@@ -34,7 +34,37 @@ import (
 // help, so the agent stops rather than hammering the connector.
 var errRevoked = errors.New("sheep: this machine is no longer in the flock")
 
-// Run joins the flock and serves until the process is stopped.
+// Target is one flock this machine is a sheep in.
+type Target struct {
+	Name       string
+	RosterPath string
+	NodePath   string
+}
+
+// RunMany serves every flock this machine is a sheep in, all at once.
+//
+// Each flock has its own identity, its own roster and its own connectors, so
+// they are simply independent agents sharing a process. Losing one — being
+// revoked from a flock, say — leaves the others alone.
+func RunMany(targets []Target, connectorAddr string) error {
+	if len(targets) == 0 {
+		return errors.New("sheep: this machine is not a sheep in any flock")
+	}
+	var wg sync.WaitGroup
+	for _, t := range targets {
+		wg.Add(1)
+		go func(t Target) {
+			defer wg.Done()
+			if err := Run(t.RosterPath, t.NodePath, connectorAddr); err != nil {
+				log.Printf("sheep: flock %q: %v", t.Name, err)
+			}
+		}(t)
+	}
+	wg.Wait()
+	return nil
+}
+
+// Run joins one flock and serves until the process is stopped.
 func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {

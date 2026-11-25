@@ -8,7 +8,8 @@ Wants=network-online.target
 Type=simple
 # The connector holds no secrets. It needs the public roster and its own TLS
 # certificate, both of which live in its state directory.
-ExecStart=/usr/local/bin/ssheep connector --dir /var/lib/ssheep
+Environment=SSHEEP_DIR=/var/lib/ssheep
+ExecStart=/usr/local/bin/ssheep connector
 Restart=always
 RestartSec=3
 
@@ -26,7 +27,8 @@ RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 LimitNOFILE=65536
 # Other machines need an address they can dial. Add it to ExecStart if the
 # connector is behind a NAT or has more than one address:
-#   --advertise flock.example.com:7000
+#   --addr flock.example.com:7000      (when enrolled in a flock)
+#   --advertise flock.example.com:7000 (a standalone, --public relay)
 
 [Install]
 WantedBy=multi-user.target

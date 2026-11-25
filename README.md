@@ -3,7 +3,8 @@
 **One binary. One file. One key.**
 
 Control a flock of machines — your own boxes, wherever they are — without opening
-a port, without an account, and without trusting anybody's server.
+a port, without an account, and without trusting anybody's server. A machine can be
+in as many flocks as you like.
 
 > **Very early. Not secure.** A working prototype, published because it is useful,
 > not because it is safe. There has been no audit. Do not use it for anything you
@@ -13,7 +14,7 @@ a port, without an account, and without trusting anybody's server.
 
 | | | |
 |---|---|---|
-| 👑 | **master** | Holds the flock key, mints invites, runs commands. Needs no reachable address — a laptop that is usually off will do. |
+| 👑 | **master** | Holds a flock's key, mints invites, runs commands. Needs no reachable address — a laptop that is usually off will do. |
 | 🐑 | **sheep** | A machine in the flock. Only ever dials *out*. Holds nothing but its own key. |
 | 📡 | **connector** | A blind relay and address book. The only role needing a reachable address, and it can be any machine, including a sheep. |
 
@@ -36,32 +37,50 @@ git clone https://github.com/bash3r777/ssheep && cd ssheep && make build
 
 ## Quick start
 
+One command sets up a whole flock:
+
 ```sh
-# on the machine you will control the flock from
-ssheep master
+ssheep master flock "myflock"
 ```
 
-It prints two things. Paste the first on each machine you want in the flock, one
-ticket each, and the second on the one machine with a public address:
+It prints one line per machine. Paste each line on the machine it names — anything
+with a shell, that has never seen ssheep:
 
 ```sh
-ssheep sheep "<ticket>"
-ssheep connector "<ticket>"
+curl -fsSL https://ssheep.xyz/install.sh | sh && ssheep sheep "<ticket>"
+curl -fsSL https://ssheep.xyz/install.sh | sh && ssheep connector "<ticket>"
 ```
 
 That is the whole setup. The connector works out its own address and tells the
 flock, so there is no address or fingerprint to copy anywhere. Then:
 
 ```sh
-ssheep see
-ssheep run --all -- uptime
+ssheep see                   # every machine, live
+ssheep run "myflock" -- uptime
 ```
 
-Every default is overridable — the flock name, the public relay it starts with,
-how many tickets are minted, the connector's port. See `ssheep master -h`.
+Every default is overridable — the public relay it starts with, how many tickets
+are minted, the connector's port. See `ssheep master -h`.
 
 Add a second connector early. Machines try them in roster order and survive
 losing any of them; one connector is a single point of failure.
+
+## More than one flock
+
+A machine is not tied to a flock. Run `ssheep master` again for a second one, and
+hand a machine two tickets to put it in both:
+
+```sh
+ssheep master flock "work"
+ssheep flock list            # every flock this machine knows
+ssheep see "work"            # one flock
+ssheep see                   # all of them
+```
+
+Each flock has its own key, its own roster, its own connectors and its own name for
+the machine, and they live in `~/.ssheep/flocks/<name>/`. A relay and a connector
+can serve several flocks at once; a machine can be a sheep in one and a connector in
+another.
 
 ## Where to read more
 
@@ -74,8 +93,8 @@ losing any of them; one connector is a single point of failure.
 ## Status
 
 Early, but working end to end: identity, invites, connectors, failover across
-more than one of them, many flocks on one relay, the relay path, `see`, `run`,
-and revocation across networks.
+more than one of them, many flocks on one relay, one machine in many flocks, the
+relay path, `see`, `run`, and revocation across networks.
 
 Known gaps: online/offline is reported per connector, so with several connectors a
 machine connected to a different one can show as offline. There is no interactive
