@@ -1,0 +1,27 @@
+[Unit]
+Description=sshepard sheep (this machine's place in the flock)
+Documentation=https://sshepard.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Install the invite first:
+#   sshepard sheep --dir /var/lib/sshepard --invite-file /root/pi.invite.json
+ExecStart=/usr/local/bin/sshepard sheep --dir /var/lib/sshepard
+Restart=always
+RestartSec=5
+
+# A sheep holds only its own private key.
+DynamicUser=no
+User=sshepard
+Group=sshepard
+StateDirectory=sshepard
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

@@ -372,6 +372,7 @@ func cmdSheep(args []string) error {
 	file := fs.String("invite-file", "", "a path to an invite file to install")
 	conn := fs.String("connector", "", "use this connector instead of the flock's first")
 	dir := fs.String("dir", "", "where keys and the roster live")
+	installOnly := fs.Bool("install-only", false, "unpack the invite and exit, do not serve")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -389,6 +390,9 @@ func cmdSheep(args []string) error {
 	}
 	if _, err := os.Stat(nodeKeyPath); err != nil {
 		return errors.New("sheep: this machine is not enrolled yet — pass --invite or --invite-file")
+	}
+	if *installOnly {
+		return nil
 	}
 	return sheep.Run(rosterPath, nodeKeyPath, *conn)
 }

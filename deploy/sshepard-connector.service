@@ -1,0 +1,29 @@
+[Unit]
+Description=sshepard connector (flock address book and relay)
+Documentation=https://sshepard.com
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# The connector holds no secrets. It needs the public roster and its own TLS
+# certificate, both of which live in its state directory.
+ExecStart=/usr/local/bin/sshepard connector --dir /var/lib/sshepard --listen :7000
+Restart=always
+RestartSec=3
+
+# A connector is a small, blind relay. Give it as little as it needs.
+DynamicUser=yes
+StateDirectory=sshepard
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
