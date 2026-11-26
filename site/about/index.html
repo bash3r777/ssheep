@@ -12,10 +12,10 @@
 <div class="vibe">
   <span class="hot">100% Vibe Coded!</span>
   <span class="bot"><span class="arm">🦾</span><span class="head">🤖</span><span class="arm flip">🦾</span></span>
-  <span>early prototype, no audit, not secure</span>
+  <span class="hot">Use at own Risk!</span>
 </div>
 
-<div class="v3" style="max-width:900px">
+<div class="v3" style="max-width:900px; padding-top:18px">
 
   <p class="muted" style="font-size:11px;letter-spacing:.14em;text-transform:uppercase">
     <a href="/">ssheep</a> <span>&nbsp;/&nbsp;</span> how it works
@@ -28,6 +28,15 @@
     <strong>Very early. Not secure.</strong> A working prototype, not an audited tool.
     The protocol will change. Do not use it for anything you would be upset to lose.
   </div>
+
+  <h2>One command, then one line per machine</h2>
+  <p><code>ssheep master flock "myflock"</code> creates the flock, pre-adds the project's
+  public relay, and prints one line per machine — a sheep, a connector, and a spare
+  master. Each line installs the binary <em>and</em> joins, and the ticket says what the
+  machine is to be, so there is no verb to get wrong:</p>
+<pre class="plain">curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "&lt;ticket&gt;"</pre>
+  <p class="muted">The installer does the joining itself, by the full path it just wrote to,
+  so it works whether or not that directory happens to be on PATH.</p>
 
   <div class="grid2">
     <div>
@@ -90,6 +99,9 @@ ssheep flock list              # every flock this machine knows</pre>
   lives on one laptop cannot be changed the day that laptop dies. So a master ticket
   carries the flock key, and one is minted by default. A second master can mint tickets,
   revoke machines and send commands exactly as the first one does.</p>
+  <p>A master is not a service: it connects when you type a command. So it asks the
+  connector for the current roster as it connects and takes it when it is newer — that is
+  how a master that has been away for weeks still knows about machines added since.</p>
   <p class="muted">The cost, plainly: the key now exists in two places. Mint as few
   master tickets as you can bear, and keep each one at least as safe as the machine you
   run ssheep from.</p>

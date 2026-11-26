@@ -48,6 +48,7 @@ SETUP — ONE COMMAND, THEN ONE LINE PER MACHINE
   Opinionated defaults, all overridable:
     public relay    relay.ssheep.xyz:7000, pre-added to the roster --relay / --private
     tickets minted  3 sheep, 1 connector                          --sheep N / --connector N
+    spare masters   1 (a master ticket carries the flock key)     --masters N
     connector port  7000                                          --port
 
 MULTIPLE FLOCKS
@@ -61,6 +62,18 @@ MULTIPLE FLOCKS
   connector can serve several flocks at once: one reachable machine, one port. Each
   flock is entirely separate — its own key, roster, connectors and machine names —
   so being in a second flock cannot leak anything into the first.
+
+MULTIPLE MASTERS
+  A flock can have more than one master, and one is minted by default. A master
+  ticket is the only one that carries the flock key, so the machine that takes it can
+  add and remove machines, mint tickets and accept a connector's offer — exactly as
+  the first master does. `--masters 0` mints none.
+  - A master has no service: it connects when you run a command. As it connects it
+    asks the connector for the current roster and adopts it when it is newer, under
+    the same rules a sheep uses, so a master that has been away still sees machines
+    added since.
+  - The cost is real: the flock key then exists in two places. Mint as few master
+    tickets as you can bear, and treat each line as being as sensitive as the master.
 
 STATE
   Everything lives under $SSHEEP_DIR, default ~/.ssheep, one directory per flock:
