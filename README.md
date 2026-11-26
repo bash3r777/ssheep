@@ -43,10 +43,11 @@ One command sets up a whole flock:
 ssheep master flock "myflock"
 ```
 
-It prints one line per machine — a sheep, a connector, and a spare master. Paste
-each line on the machine it names, anything with a shell that has never seen
-ssheep. The line installs the binary and joins in one go, and the ticket says
-what the machine is to be, so there is no verb to get wrong:
+It prints a line for every machine it has a ticket for — three sheep, one
+connector and a spare master, by default. Paste each line on the machine it
+names, anything with a shell that has never seen ssheep. The line installs the
+binary and joins in one go, and the ticket says what the machine is to be, so
+there is no verb to get wrong:
 
 ```sh
 curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "<ticket>"
