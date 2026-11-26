@@ -49,8 +49,8 @@ em { color: var(--fg); font-style: normal; }
 .vibe a:hover { color: var(--accent); text-decoration: none; }
 
 /* ── the wordmark: emoji sheep either side of a stretched word ─────────── */
-.v3 { max-width: 1080px; margin: 0 auto; padding: 6px 20px 40px; }
-.v3head { margin: 0 0 22px; }
+.v3 { max-width: 1080px; margin: 0 auto; padding: 4px 20px 30px; }
+.v3head { margin: 0 0 16px; }
 .v3head .big { margin: 0; }
 .wordmark { display: block; width: 100%; height: auto; }
 .wordmark .wm-word {
@@ -75,7 +75,7 @@ em { color: var(--fg); font-style: normal; }
   display: block;
   width: 100%;
   height: auto;
-  margin: 0 0 22px;
+  margin: 0 0 16px;
   overflow: visible;
 }
 .headline text {
@@ -94,8 +94,8 @@ em { color: var(--fg); font-style: normal; }
   border: 3px solid var(--accent);
   color: var(--fg);
   font: inherit;
-  font-size: clamp(12px, 1.45vw, 14px);
-  padding: 14px 16px;
+  font-size: clamp(12px, 1.4vw, 14px);
+  padding: 12px 16px;
   letter-spacing: -.01em;
   white-space: nowrap;
   overflow: hidden;
@@ -141,7 +141,7 @@ em { color: var(--fg); font-style: normal; }
   display: block; text-align: center;
   border: 3px solid var(--accent);
   color: var(--fg);
-  padding: 12px 10px;
+  padding: 10px;
   font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
   transition: background-color .16s, border-color .16s, color .16s;
 }
@@ -158,8 +158,8 @@ em { color: var(--fg); font-style: normal; }
 
 /* ── features: one line each ───────────────────────────────────────────── */
 .fhead { color: var(--accent); font-weight: 700; font-size: 12px; letter-spacing: .13em; text-transform: uppercase; margin: 24px 0 2px; }
-.feat { list-style: none; margin: 14px 0 0; padding: 0; color: #b8c4d0; font-size: 13.5px; line-height: 1.55; }
-.feat li { padding: 5px 0; border-top: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feat { list-style: none; margin: 12px 0 0; padding: 0; color: #b8c4d0; font-size: 13.5px; line-height: 1.5; }
+.feat li { padding: 4px 0; border-top: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .feat li:first-child { border-top: 0; }
 .feat li.wide { white-space: normal; overflow: visible; }
 @media (max-width: 620px) { .feat li { white-space: normal; overflow: visible; } }
@@ -172,12 +172,12 @@ em { color: var(--fg); font-style: normal; }
 .term .dt { width: 10px; height: 10px; border-radius: 50%; }
 .term .dt.r { background: #ff5f57; } .term .dt.y { background: #febc2e; } .term .dt.g { background: #28c840; }
 .term .tbar .tt { margin-left: 8px; color: var(--mut); font-size: 12.5px; }
-.term .termbody { padding: 16px 18px; }
+.term .termbody { padding: 13px 15px; }
 .term .termbody pre.dash {
   margin: 0; font: inherit;
   font-family: "DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace;
-  font-size: clamp(8px, 1vw, 11px);
-  line-height: 1.55;
+  font-size: clamp(7.5px, 0.9vw, 10px);
+  line-height: 1.5;
   white-space: pre;
   overflow-x: hidden;
 }
@@ -237,6 +237,6 @@ td:first-child { white-space: nowrap; width: 1%; }
 @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
 
 /* ── footer: links only, centred ───────────────────────────────────────── */
-.foot { display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; color: var(--mut); font-size: 13.5px; letter-spacing: .1em; text-transform: uppercase; border-top: 1px solid var(--line); margin-top: 34px; padding-top: 18px; }
+.foot { display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; color: var(--mut); font-size: 13.5px; letter-spacing: .1em; text-transform: uppercase; border-top: 1px solid var(--line); margin-top: 26px; padding-top: 14px; }
 .foot a { color: var(--mut); }
 .foot a:hover { color: var(--accent); text-decoration: none; }
