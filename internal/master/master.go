@@ -5,7 +5,9 @@
 package master
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -38,6 +40,7 @@ type Client struct {
 	mu      sync.Mutex
 	wires   map[string]*peerChan
 	replies chan *proto.Envelope
+	rosters chan *proto.Envelope
 	closed  chan struct{}
 	once    sync.Once
 }
@@ -90,9 +93,11 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 		signed:    sr,
 		wires:     map[string]*peerChan{},
 		replies:   make(chan *proto.Envelope, 4),
+		rosters:   make(chan *proto.Envelope, 1),
 		closed:    make(chan struct{}),
 	}
 	go c.readLoop()
+	c.catchUp(rosterPath)
 	return c, nil
 }
 
@@ -123,6 +128,44 @@ func (c *Client) Connector() string { return c.connector }
 
 // Connectors returns every connector in this flock, in preference order.
 func (c *Client) Connectors() []flock.Connector { return c.roster.Connectors }
+
+// catchUp asks the connector for the roster and takes it if it is newer.
+//
+// A flock can have more than one master, and a master is not a service — it is
+// something you sit down at, possibly weeks after the last time. Without this it
+// would work from the copy it happened to hold, could not verify a machine added
+// since, and would fail at the handshake with no clue why. Sheep already follow
+// the roster; this is the same idea, once, per command.
+func (c *Client) catchUp(rosterPath string) {
+	if err := peer.Send(c.conn, proto.Wrap(proto.TypeRoster, nil)); err != nil {
+		return
+	}
+	var env *proto.Envelope
+	select {
+	case env = <-c.rosters:
+	case <-time.After(3 * time.Second):
+		return
+	case <-c.closed:
+		return
+	}
+	var sr flock.SignedRoster
+	if err := json.Unmarshal(env.Body, &sr); err != nil {
+		return
+	}
+	r, err := sr.Verify()
+	if err != nil {
+		return
+	}
+	if !bytes.Equal(r.FlockKey, c.roster.FlockKey) || r.Version <= c.roster.Version {
+		return
+	}
+	if err := sr.Save(rosterPath); err != nil {
+		fmt.Fprintf(os.Stderr, "ssheep: could not record the newer roster: %v\n", err)
+		return
+	}
+	c.roster = r
+	c.signed = &sr
+}
 
 // Close ends the connection.
 func (c *Client) Close() error { return c.conn.Close() }
@@ -180,6 +223,11 @@ func (c *Client) readLoop() {
 		case proto.TypeListReply:
 			select {
 			case c.replies <- env:
+			default:
+			}
+		case proto.TypeRoster:
+			select {
+			case c.rosters <- env:
 			default:
 			}
 		}

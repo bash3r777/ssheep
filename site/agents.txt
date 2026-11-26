@@ -24,19 +24,21 @@ INSTALL
   #   source:   git clone https://github.com/bash3r777/ssheep && cd ssheep && make build
   # static binaries, linux/darwin/windows, amd64/arm64. no other dependencies.
 
-SETUP — ONE COMMAND, THEN PASTE TWO KINDS OF LINE
+SETUP — ONE COMMAND, THEN ONE LINE PER MACHINE
   1. on the machine you control from (the "master"):
        ssheep master flock "myflock"
      This creates the flock, pre-adds the project's public relay, mints tickets,
-     and prints, for each machine to add:
-       ssheep sheep "<ticket>"      <- paste one per machine you want in the flock
-       ssheep connector "<ticket>"  <- paste on the machine with a public address
+     and prints one line per machine, in three groups:
+       🐑 sheep       a machine you manage
+       📡 connector   the machine with a public address
+       👑 master      a second master; carries the flock key (one minted by default)
      It also reports the flock and accepts any connector that has registered.
 
-  2. paste those lines (each as printed: `curl ... | sh && ssheep <role> "<ticket>"`).
-     Each ticket works once and carries a private key. Nothing else to configure:
-     the connector works out its own address, tells the flock, and the master
-     accepts it on the next command.
+  2. paste each line as printed:
+       curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "<ticket>"
+     The installer joins the machine itself, by the full path it just installed to,
+     so it works whether or not that directory is on PATH. The ticket says what the
+     machine is to be, so there is no verb to get wrong and no second command.
 
   3. on the master:
        ssheep master "myflock" --watch 3m   <- optional: watch machines join
@@ -63,6 +65,7 @@ MULTIPLE FLOCKS
 STATE
   Everything lives under $SSHEEP_DIR, default ~/.ssheep, one directory per flock:
     ~/.ssheep/flocks/<name>/flock.key.json   the flock key. SENSITIVE. Off the connector.
+                                             Present only where a master ticket put it.
     ~/.ssheep/flocks/<name>/node.key.json    this machine's identity in that flock. SENSITIVE.
     ~/.ssheep/flocks/<name>/roster.json      the signed roster. Public; safe to share.
   Once enrolled, a machine needs no arguments: `ssheep sheep` and
@@ -70,19 +73,25 @@ STATE
   (The old `--dir <path>` flag still works; it now just sets $SSHEEP_DIR.)
 
 ROLES
-  master     holds a flock key, mints tickets, sends commands
+  master     holds a flock key, mints tickets, sends commands. More than one is
+             fine: a master ticket carries the flock key, so any master can add and
+             remove machines. Keep master lines as safe as the master machine.
   sheep      runs the agent, executes commands
   connector  blind relay + address book; also a member, which is how it tells the
              flock where it is. The only role needing a reachable address.
-  One binary does all three; the role is a subcommand.
+  One binary does all three; the role is a subcommand, or read from the ticket.
 
 COMMANDS
   ssheep master [flock] <name> [--relay H:PORT] [--private] [--sheep N]
-                [--connector N] [--invite] [--watch 3m]
+                [--connector N] [--masters N] [--invite] [--watch 3m]
                                           set up a flock; prints the lines to paste
-  ssheep sheep "<ticket>"                 join as a sheep and serve
-  ssheep connector "<ticket>"             join as a connector: serve a relay, register it
-                                          (--addr H:PORT if the guessed address is wrong)
+  ssheep join "<ticket>"                  take a ticket: install it, then be what it
+                                          says (sheep and connector serve; master
+                                          installs and reports). --install-only to
+                                          take it and stop
+  ssheep sheep "<ticket>"                 same, when you know it is a sheep
+  ssheep connector "<ticket>"             same, for a connector (--addr H:PORT,
+                                          --port N, --public)
   ssheep see [<flock>]                    the flocks, live (all of them by default)
   ssheep run <flock> -- CMD...            every sheep in one flock
   ssheep run <flock> --name NAME -- CMD... one machine

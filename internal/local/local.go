@@ -190,7 +190,7 @@ func Install(source string) (*Flock, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir, rosterPath, nodePath, _ := paths(r.Name)
+	dir, rosterPath, nodePath, keyPath := paths(r.Name)
 	if _, err := os.Stat(rosterPath); err == nil {
 		return nil, fmt.Errorf("local: this machine is already in a flock called %q", r.Name)
 	}
@@ -199,6 +199,14 @@ func Install(source string) (*Flock, error) {
 	}
 	if err := in.Key().Save(nodePath); err != nil {
 		return nil, err
+	}
+	// A master ticket carries the flock key, so the new master can change the
+	// flock too. Every other ticket leaves it behind, which is why only a master
+	// ever has one.
+	if in.Flock != nil {
+		if err := in.Flock.Save(keyPath); err != nil {
+			return nil, err
+		}
 	}
 	if err := in.Roster.Save(rosterPath); err != nil {
 		return nil, err

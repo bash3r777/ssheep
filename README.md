@@ -14,7 +14,7 @@ in as many flocks as you like.
 
 | | | |
 |---|---|---|
-| 👑 | **master** | Holds a flock's key, mints invites, runs commands. Needs no reachable address — a laptop that is usually off will do. |
+| 👑 | **master** | Holds a flock's key, mints invites, runs commands. Needs no reachable address — a laptop that is usually off will do. More than one is fine, and a good idea. |
 | 🐑 | **sheep** | A machine in the flock. Only ever dials *out*. Holds nothing but its own key. |
 | 📡 | **connector** | A blind relay and address book. The only role needing a reachable address, and it can be any machine, including a sheep. |
 
@@ -43,12 +43,13 @@ One command sets up a whole flock:
 ssheep master flock "myflock"
 ```
 
-It prints one line per machine. Paste each line on the machine it names — anything
-with a shell, that has never seen ssheep:
+It prints one line per machine — a sheep, a connector, and a spare master. Paste
+each line on the machine it names, anything with a shell that has never seen
+ssheep. The line installs the binary and joins in one go, and the ticket says
+what the machine is to be, so there is no verb to get wrong:
 
 ```sh
-curl -fsSL https://ssheep.xyz/install.sh | sh && ssheep sheep "<ticket>"
-curl -fsSL https://ssheep.xyz/install.sh | sh && ssheep connector "<ticket>"
+curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "<ticket>"
 ```
 
 That is the whole setup. The connector works out its own address and tells the
@@ -60,10 +61,22 @@ ssheep run "myflock" -- uptime
 ```
 
 Every default is overridable — the public relay it starts with, how many tickets
-are minted, the connector's port. See `ssheep master -h`.
+are minted of each kind, the connector's port. See `ssheep master -h`.
 
 Add a second connector early. Machines try them in roster order and survive
 losing any of them; one connector is a single point of failure.
+
+## More than one master
+
+A master ticket carries the flock key, so the machine that takes it can add and
+remove machines too — and one master is not a single point of failure either. Mint
+one by default (`--masters 1`) and keep it somewhere other than the master you use
+every day: a flock whose key exists in exactly one place cannot be changed the day
+that place dies. `--masters 0` if you would rather not have a second copy of the
+key at all.
+
+A master also catches up: it takes the current roster from the connector when it
+connects, so a master that has been away still sees machines added since.
 
 ## More than one flock
 

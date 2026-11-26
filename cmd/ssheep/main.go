@@ -38,6 +38,11 @@ const (
 	// defaultSheep and defaultConnector are how many tickets `master` mints.
 	defaultSheep     = 3
 	defaultConnector = 1
+	// defaultMasters is how many spare master tickets it mints. One, because a
+	// flock whose key exists in exactly one place is a flock that cannot be
+	// changed the day that place dies — and a master ticket is only as safe as
+	// the line it is printed on.
+	defaultMasters = 1
 	// joinURL is the one-liner that installs the binary, so a ticket can be a
 	// single line somebody pastes onto a machine that has nothing on it.
 	joinURL = "https://ssheep.xyz/install.sh"
@@ -46,6 +51,7 @@ const (
 const usage = `ssheep — one binary, one file, one key.
 
   master [flock] <name>      create a flock, print what to run on the others
+  join "<ticket>"            take a ticket somebody gave you, and be what it says
   sheep "<ticket>"           join a flock as a sheep, then serve
   connector "<ticket>"       join a flock as a connector, then serve
 
@@ -78,6 +84,8 @@ func main() {
 	switch cmd {
 	case "master":
 		err = cmdMaster(rest)
+	case "join":
+		err = cmdJoin(rest)
 	case "sheep":
 		err = cmdSheep(rest)
 	case "connector":
@@ -191,6 +199,92 @@ func connectorTargets() ([]connector.Enrolled, error) {
 		out = append(out, connector.Enrolled{Name: f.Name, RosterPath: f.RosterPath, NodePath: f.NodePath})
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------------------
+// join
+// ---------------------------------------------------------------------------
+
+// cmdJoin is what the printed one-liner runs once the binary is installed.
+//
+// The role is taken from the ticket rather than named on the command line, so
+// there is one line to hand out per machine and no way to paste the wrong verb.
+// A master ticket leaves a machine that holds the flock key, and a master is
+// something you sit down at rather than something that serves, so that one
+// installs and reports instead of running.
+func cmdJoin(args []string) error {
+	fs := newFlagSet("join")
+	ticket := fs.String("ticket", "", "the ticket, if it is not the argument")
+	conn := fs.String("connector", "", "use this connector instead of the flock's first")
+	addr := fs.String("addr", "", "connector: the address other machines reach this one at")
+	port := fs.Int("port", defaultPort, "connector: port to listen on")
+	public := fs.Bool("public", false, "connector: also serve flocks that are not yours")
+	installOnly := fs.Bool("install-only", false, "take the ticket and exit, do not serve")
+	pos, err := parseFlags(fs, args)
+	if err != nil {
+		return err
+	}
+	source := *ticket
+	if source == "" && len(pos) > 0 {
+		source = pos[0]
+	}
+	if source == "" {
+		return errors.New(`join: no ticket
+
+  ssheep join "<ticket>"     the line somebody gave you does this for you`)
+	}
+	in, err := invite.Resolve(source)
+	if err != nil {
+		return err
+	}
+	roster, err := in.Validate()
+	if err != nil {
+		return err
+	}
+	f, err := local.Install(source)
+	if err != nil {
+		// Already enrolled. That is a restart, not a first join — the same
+		// command has to work both times, or a service unit cannot use it.
+		existing, oerr := local.Resolve(roster.Name)
+		if oerr != nil {
+			return err
+		}
+		f = existing
+	}
+	if *installOnly {
+		fmt.Printf("%s  this machine took the ticket for %q\n", roleMark(f.Role), f.Name)
+		return nil
+	}
+
+	switch f.Role {
+	case flock.RoleMaster:
+		fmt.Printf("👑  this machine is now a master of flock %q\n", f.Name)
+		fmt.Printf("    the flock key is at %s — back it up, and keep it off sheep\n", f.KeyPath)
+		fmt.Printf("    try:  ssheep see %q   ·   ssheep master %q --invite\n", f.Name, f.Name)
+		return nil
+	case flock.RoleSheep:
+		fmt.Printf("🐑  this machine is now a sheep in flock %q\n", f.Name)
+		targets, err := sheepTargets()
+		if err != nil {
+			return err
+		}
+		if len(targets) == 0 {
+			return errors.New("join: the ticket was taken, but this machine is not a sheep in any flock")
+		}
+		return sheep.RunMany(targets, *conn)
+	case flock.RoleConnector:
+		fmt.Printf("📡  this machine is now a connector for flock %q\n", f.Name)
+		enrolled, err := connectorTargets()
+		if err != nil {
+			return err
+		}
+		if len(enrolled) == 0 {
+			return errors.New("join: the ticket was taken, but this machine is not a connector for any flock")
+		}
+		return connector.Join(enrolled, *addr, *port, *public)
+	default:
+		return fmt.Errorf("join: this ticket says %q, which this build does not know", f.Role)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -741,7 +835,10 @@ func cmdInvite(args []string) error {
 		fmt.Printf("wrote %s\n", *out)
 	}
 	fmt.Printf("\nadded %q to flock %q as a %s\n\n", *name, f.Name, *role)
-	fmt.Printf("  %s\n\n", ticketLine(*role, blob))
+	fmt.Printf("  %s\n\n", ticketLine(blob))
+	if *role == flock.RoleMaster {
+		fmt.Printf("a master ticket carries the flock key — the authority to add and remove\nmachines. Keep that line as safe as this machine.\n\n")
+	}
 	return nil
 }
 
@@ -790,4 +887,17 @@ func short(s string) string {
 		return s
 	}
 	return s[:16] + "..."
+}
+
+// roleMark is the emoji that goes with a role, so a line reads the same wherever
+// it is said.
+func roleMark(role string) string {
+	switch role {
+	case flock.RoleMaster:
+		return "👑"
+	case flock.RoleConnector:
+		return "📡"
+	default:
+		return "🐑"
+	}
 }

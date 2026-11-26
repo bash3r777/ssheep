@@ -31,6 +31,15 @@ type Invite struct {
 	Role     string             `json:"role"`
 	SignSeed []byte             `json:"sign_seed"`
 	KexSeed  []byte             `json:"kex_seed"`
+
+	// Flock is the flock's authority key, and it rides along only on a master
+	// ticket.
+	//
+	// A master is the machine allowed to change the flock, and the only thing
+	// that lets it is this key. So a master ticket is the authority to add and
+	// remove machines, handed to whoever holds it. That is the whole point of a
+	// second master — and the reason to mint as few as you can bear.
+	Flock *flock.KeyFile `json:"flock,omitempty"`
 }
 
 // Key returns the identity for this invite.
@@ -54,6 +63,14 @@ func (i *Invite) Validate() (flock.Roster, error) {
 	}
 	if string(m.SignKey) != string(i.Key().SignPub()) {
 		return r, errors.New("invite: the key does not match the roster entry")
+	}
+	if i.Role == flock.RoleMaster {
+		if i.Flock == nil {
+			return r, errors.New("invite: a master ticket must carry the flock key")
+		}
+		if !bytes.Equal(i.Flock.SignPub(), r.FlockKey) {
+			return r, errors.New("invite: the flock key does not match the roster")
+		}
 	}
 	return r, nil
 }

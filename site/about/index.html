@@ -84,6 +84,16 @@ ssheep flock list              # every flock this machine knows</pre>
   <p class="muted">A relay can serve many flocks at once, and a connector can be a connector for
   several at the same time. One reachable machine, one port, many flocks.</p>
 
+  <h2>More than one master</h2>
+  <p>The flock key is the authority — it signs the roster, so whoever holds it can add
+  and remove machines. Keeping it in one place is tidy and fragile: a flock whose key
+  lives on one laptop cannot be changed the day that laptop dies. So a master ticket
+  carries the flock key, and one is minted by default. A second master can mint tickets,
+  revoke machines and send commands exactly as the first one does.</p>
+  <p class="muted">The cost, plainly: the key now exists in two places. Mint as few
+  master tickets as you can bear, and keep each one at least as safe as the machine you
+  run ssheep from.</p>
+
   <h2>How a connector finds its own address</h2>
   <p>A master cannot know a connector's address in advance — the connector is the machine
   with the public address, and the master has never spoken to it. So the connector says so
@@ -99,9 +109,11 @@ ssheep flock list              # every flock this machine knows</pre>
 
   <h2>Adding and removing machines</h2>
   <p><code>ssheep master</code> generates a key pair for each new machine, adds its public key
-  to the roster, re-signs it, and prints a ticket. The ticket carries that machine's private
-  key, so hand it over privately. <code>ssheep forget --name sheep-2</code> removes one and
-  publishes the new roster; connectors drop it within seconds.</p>
+  to the roster, re-signs it, and prints a ticket. The printed line installs the binary and
+  joins in one command, and the ticket says what the machine is to be — a sheep, a
+  connector, or another master. The ticket carries that machine's private key, so hand it
+  over privately. <code>ssheep forget --name sheep-2</code> removes one and publishes the
+  new roster; connectors drop it within seconds.</p>
 
   <h2>More than one connector</h2>
   <p>A single connector is a single point of failure, which is a strange thing for a tool

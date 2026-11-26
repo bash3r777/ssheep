@@ -40,11 +40,19 @@ elsewhere, accepts any connector that has registered itself, and reports.
 Everything it picks is a default that a flag can override — the point is that
 nobody has to read the flags. Run it again with another name for a second flock.
 
-`ssheep sheep "<ticket>"` and `ssheep connector "<ticket>"` are the other two.
-Both take the ticket as a positional argument because that is what people paste.
-With no ticket they carry on doing what the machine is already enrolled as, so a
-restart never changes a machine's role. A machine can be enrolled in several
-flocks; each is served side by side, with its own key from `internal/local`.
+`ssheep sheep "<ticket>"` and `ssheep connector "<ticket>"` are the other two, and
+`ssheep join "<ticket>"` is what the printed one-liner calls: it reads the role
+out of the ticket, so nobody has to name it. All take the ticket as a positional
+argument because that is what people paste. With no ticket they carry on doing
+what the machine is already enrolled as, so a restart never changes a machine's
+role. A machine can be enrolled in several flocks; each is served side by side,
+with its own key from `internal/local`.
+
+A master ticket is the only one that carries `invite.Invite.Flock`, the flock key.
+That is what makes a second master a real master — and why `--masters` defaults to
+one rather than to as many as you like. `internal/master`'s `Open` refreshes the
+roster from the connector before doing anything, because a master that has been
+away otherwise cannot verify a machine added since.
 
 Commands that act on a flock take it as the first positional (`ssheep see work`,
 `ssheep run work -- uptime`), and leaving it out means "all of them".

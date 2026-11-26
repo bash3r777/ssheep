@@ -42,9 +42,11 @@ operator hands it over deliberately.
 
 1. `ssheep master flock "<name>"` (or `ssheep invite --name pi` by hand) generates
    a key pair for the new machine, adds its public key to the roster, re-signs the
-   roster and prints a ticket.
+   roster and prints a ticket. A master ticket additionally carries the flock key.
 2. The ticket goes to the new machine, which installs two files: its own private
-   key, and a copy of the roster.
+   key, and a copy of the roster. The printed line does both at once —
+   `… | sh -s -- --ticket "<ticket>"` — so the machine is installed and joined by
+   one command, run by the installer at the path it just wrote to.
 3. The machine connects to a connector, which challenges it to sign a random
    nonce, and the signature is checked against the roster. The roster travels
    with the authentication message, so a connector that has never met the flock
@@ -111,6 +113,29 @@ never consults the connector cannot be interrupted by a roster change. Making
 revocation instant in a peer-to-peer network is a hard problem, and for now the
 answer is that the connector is the chokepoint, so revoking works for as long as
 the connector is in the path.
+
+## More than one master
+
+The flock key is the authority: it signs rosters, so whoever holds it can add and
+remove machines. Keeping it in one place is the tidy answer and a fragile one — a
+flock whose key lives on one laptop cannot be changed the day that laptop dies.
+
+So a master ticket carries the flock key itself (`invite.Invite.Flock`), and the
+machine that takes it is a master in the full sense: it can mint tickets, revoke
+machines, accept a connector's offer and run commands. `ssheep master` mints one
+spare by default, because a single copy of the key is a single point of failure for
+the one thing you cannot reproduce.
+
+A second master needs nothing special to run — a master is not a service; it
+connects like any member when you type a command. But a master that has been away
+holds a stale roster, and a stale roster cannot verify a machine added since, so
+the handshake fails with no clue why. `master.Open` therefore asks the connector
+for the roster and adopts it when it is newer, once per command, under the same
+rules a sheep uses: it must verify, and be signed by the same flock key.
+
+The cost is stated plainly: the flock key now lives in more than one place. Mint
+as few master tickets as you can bear, and keep each one at least as safe as the
+machine you run `ssheep` from.
 
 ## One machine, many flocks
 

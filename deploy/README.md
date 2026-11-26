@@ -14,7 +14,7 @@ systemctl daemon-reload
 Then hand it the ticket that `ssheep master` printed:
 
 ```sh
-ssheep connector "<ticket>" --install-only
+curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "<ticket>"
 systemctl enable --now ssheep-connector
 journalctl -u ssheep-connector | head
 ```
@@ -79,13 +79,13 @@ install -m 0644 deploy/ssheep-sheep.service /etc/systemd/system/
 systemctl daemon-reload
 
 # one time: the ticket that `ssheep master` printed
-ssheep sheep "<ticket>" --install-only
+ssheep join "<ticket>" --install-only
 
 systemctl enable --now ssheep-sheep
 ```
 
 The service runs `ssheep sheep`, with `SSHEEP_DIR=/var/lib/ssheep` set in the
-unit. `--install-only` unpacks the ticket and exits. Without it, `ssheep sheep`
+unit. `--install-only` takes the ticket and exits. Without it, `ssheep join`
 installs first if there is no identity yet, then serves — so the same line works
 in a provisioning script on a fresh machine and as a no-op on one that is already
 enrolled. It never overwrites an existing identity.

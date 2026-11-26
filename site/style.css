@@ -48,23 +48,25 @@ em { color: var(--fg); font-style: normal; }
 .vibe a { color: var(--mut); border-bottom: 1px solid var(--line); }
 .vibe a:hover { color: var(--accent); text-decoration: none; }
 
-/* ── the wordmark, centred and large ───────────────────────────────────── */
+/* ── the wordmark: big, and as wide as the whole page ─────────────────── */
 .v3 { max-width: 1080px; margin: 0 auto; padding: 26px 20px 64px; }
-.v3head { margin: 0 0 22px; text-align: center; }
+.v3head { margin: 0 0 26px; }
 .v3head .big {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: .16em;
+  justify-content: space-between;
+  gap: .12em;
+  width: 100%;
   margin: 0;
   font-family: Verdana, Geneva, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-weight: 800;
-  font-size: clamp(34px, 8.4vw, 100px);
-  line-height: 1.02;
-  letter-spacing: -.02em;
+  font-size: clamp(46px, 13.2vw, 160px);
+  line-height: 1;
+  letter-spacing: -.035em;
   color: var(--accent);
 }
-.v3head .big .sheep { font-size: .78em; }
+.v3head .big .sheep { font-size: .62em; }
+@media (max-width: 520px) { .v3head .big { font-size: clamp(38px, 15vw, 70px); } }
 
 /* ── two columns: the pitch on the left, the terminal on the right ─────── */
 .v3grid { display: grid; grid-template-columns: 1fr 1.15fr; gap: 36px; align-items: stretch; }
@@ -72,7 +74,15 @@ em { color: var(--fg); font-style: normal; }
 .pitch { display: flex; flex-direction: column; min-width: 0; }
 .v3side { min-width: 0; }
 
-.lede { color: #b8c4d0; font-size: 12.5px; line-height: 1.62; margin: 0 0 16px; }
+.lede {
+  margin: 0 0 22px;
+  font-family: Verdana, Geneva, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  font-size: clamp(21px, 3.1vw, 36px);
+  line-height: 1.08;
+  letter-spacing: -.02em;
+  color: var(--fg);
+}
 
 /* ── the install line, click to copy ───────────────────────────────────── */
 .cmd {
@@ -146,6 +156,11 @@ em { color: var(--fg); font-style: normal; }
 .term .dash .p, .term .dash .c { color: var(--accent); }
 .term .dash .g { color: var(--accent2); }
 .term .dash .m { color: var(--mut); }
+.term .agent { background: none; }
+.term .art { color: var(--accent2); background: none; }
+.term .cp { cursor: pointer; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
+.term .cp:hover { color: var(--accent2); }
+.term .cp.copied::after { content: " copied"; color: var(--accent2); }
 .term .cur { display: inline-block; width: 8px; height: 15px; background: var(--accent); vertical-align: -2px; animation: blink 1.1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .term .cur { animation: none; } }
@@ -160,15 +175,22 @@ em { color: var(--fg); font-style: normal; }
 .dg .lbl { fill: var(--mut); font-size: 10px; letter-spacing: .08em; }
 .dg .fname { fill: var(--accent); font-size: 11px; letter-spacing: .1em; }
 .dg .wire { fill: none; stroke: var(--wire); stroke-width: 1.2; }
+.dg .bus { fill: none; stroke: #8b98a5; stroke-width: 1.2; opacity: .85; }
 .dg .flow { fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-dasharray: 3 7; opacity: .85; animation: crawl 3.6s linear infinite; }
 @keyframes crawl { to { stroke-dashoffset: -40; } }
 @media (prefers-reduced-motion: reduce) { .dg .flow { animation: none; } }
 .dg .dot { fill: var(--accent); }
+.dg .sheep { fill: #0e141d; stroke-width: 1.5; }
+.dg .sname { font-size: 11.5px; }
+.dg .link { fill: none; stroke-width: 1.4; stroke-dasharray: 3 5; opacity: .9; }
 
-.cap { list-style: none; margin: 14px 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; color: #b8c4d0; font-size: 12.5px; }
-@media (max-width: 620px) { .cap { grid-template-columns: 1fr; } }
-.cap li { padding: 4px 0; }
-.cap .ic { display: inline-block; min-width: 1.5em; }
+/* the colours are the point: the same machine in two flocks is the same colour */
+.legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: 14px 0 0; padding: 0; list-style: none; color: #b8c4d0; font-size: 12.5px; }
+.legend li { display: flex; align-items: center; gap: .55em; }
+.legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.legend .note { color: var(--mut); }
+.hint { color: var(--mut); font-size: 12.5px; margin: 10px 0 0; }
+@media (max-width: 620px) { .legend { flex-direction: column; } }
 
 /* ── the about page: plain pre, tables, boxes ──────────────────────────── */
 .v3 pre.plain { background: var(--card); border: 1px solid var(--line); padding: 11px 13px; font-size: 12px; line-height: 1.55; margin: 10px 0; }

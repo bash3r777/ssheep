@@ -35,6 +35,7 @@ func cmdMaster(args []string) error {
 	private := fs.Bool("private", false, "no public relay: only connectors you run yourself")
 	sheepN := fs.Int("sheep", defaultSheep, "how many sheep tickets to mint")
 	connN := fs.Int("connector", defaultConnector, "how many connector tickets to mint")
+	masterN := fs.Int("masters", defaultMasters, "how many spare master tickets to mint (a master ticket carries the flock key)")
 	inviteMore := fs.Bool("invite", false, "mint fresh tickets for a flock that already exists")
 	watch := fs.Duration("watch", 0, "keep watching for machines joining, e.g. --watch 3m")
 	if err := fs.Parse(rest); err != nil {
@@ -73,21 +74,21 @@ func cmdMaster(args []string) error {
 	}
 
 	if created {
-		fmt.Printf("👑  master ready — flock %q created\n", f.Name)
+		fmt.Printf("👑  You are Master — flock %q created\n", f.Name)
 		if *relay != "" {
 			if err := addRelay(f, *relay); err != nil {
 				fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
 			}
 		}
 	} else {
-		fmt.Printf("👑  master of flock %q\n", f.Name)
+		fmt.Printf("👑  You are a master of flock %q\n", f.Name)
 	}
 
 	if f.Mastered() {
 		acceptOffers(f)
 	}
 	if created || *inviteMore {
-		if err := printTickets(f, *sheepN, *connN); err != nil {
+		if err := printTickets(f, *sheepN, *connN, *masterN); err != nil {
 			return err
 		}
 	}
@@ -125,32 +126,34 @@ func addRelay(f *local.Flock, addr string) error {
 }
 
 // printTickets mints the tickets and prints one line per machine to paste.
-func printTickets(f *local.Flock, sheepN, connN int) error {
-	if sheepN > 0 {
-		fmt.Printf("\n🐑 run this on each machine you want to be a Sheep 🐑:\n\n")
-		for i := 1; i <= sheepN; i++ {
-			blob, err := mintInvite(f.Name, fmt.Sprintf("sheep-%d", i), flock.RoleSheep)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("  %s\n", ticketLine(flock.RoleSheep, blob))
-		}
+func printTickets(f *local.Flock, sheepN, connN, masterN int) error {
+	blocks := []struct {
+		n    int
+		role string
+		head string
+	}{
+		{sheepN, flock.RoleSheep, "🐑 run this on each machine you want to be a Sheep 🐑"},
+		{connN, flock.RoleConnector, "📡 run this on each machine you want to be a Connector 📡"},
+		{masterN, flock.RoleMaster, "👑 run this on each machine you want to be a Master 👑"},
 	}
-	if connN > 0 {
-		fmt.Printf("\n📡 run this on each machine you want to be a Connector 📡:\n\n")
-		for i := 1; i <= connN; i++ {
-			name := "connector-1"
-			if connN > 1 {
-				name = fmt.Sprintf("connector-%d", i)
-			}
-			blob, err := mintInvite(f.Name, name, flock.RoleConnector)
+	for _, b := range blocks {
+		if b.n <= 0 {
+			continue
+		}
+		fmt.Printf("\n%s:\n\n", b.head)
+		for i := 1; i <= b.n; i++ {
+			blob, err := mintInvite(f.Name, fmt.Sprintf("%s-%d", b.role, i), b.role)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("  %s\n", ticketLine(flock.RoleConnector, blob))
+			fmt.Printf("  %s\n", ticketLine(blob))
 		}
 	}
 	fmt.Printf("\nEach ticket works once, on one machine, and carries that machine's private key.\n")
+	if masterN > 0 {
+		fmt.Printf("A master ticket also carries the flock key — the authority to add and remove\n")
+		fmt.Printf("machines. Keep those lines as safe as this machine.\n")
+	}
 	if sheepN > 0 {
 		fmt.Printf("Unused ones can be dropped again with `ssheep forget %q --name sheep-%d`.\n", f.Name, sheepN)
 	}
@@ -161,12 +164,27 @@ func printTickets(f *local.Flock, sheepN, connN int) error {
 // ticketLine is the whole of onboarding in one line: install, then join. It is
 // printed rather than described so it can be copied onto a machine that has
 // nothing on it at all.
-func ticketLine(role, blob string) string {
-	verb := "sheep"
-	if role == flock.RoleConnector {
-		verb = "connector"
+//
+// The installer does the joining, by full path, so it does not matter whether
+// the directory it chose is on that machine's PATH. The role is not named here
+// because the ticket carries it: nobody has to choose right, and nobody can
+// choose wrong.
+func ticketLine(blob string) string {
+	return fmt.Sprintf("curl -fsSL %s | sh -s -- --ticket %q", joinURL, blob)
+}
+
+// uniqueName keeps roster names distinct. Minting twice used to be able to
+// produce two machines called "sheep-1", which made `forget --name` a guess.
+func uniqueName(r flock.Roster, name string) string {
+	if r.FindByName(name) == nil {
+		return name
 	}
-	return fmt.Sprintf("curl -fsSL %s | sh && ssheep %s %q", joinURL, verb, blob)
+	for i := 2; ; i++ {
+		cand := fmt.Sprintf("%s-%d", name, i)
+		if r.FindByName(cand) == nil {
+			return cand
+		}
+	}
 }
 
 // mintInvite adds a member to a flock and returns the ticket for it. It reloads
@@ -190,6 +208,7 @@ func mintInvite(flockName, name, role string) (string, error) {
 	}
 	id := flock.NodeID(machine.SignPub())
 	r := f.Roster
+	name = uniqueName(r, name)
 	r.Upsert(flock.Member{
 		ID:      id,
 		Name:    name,
@@ -206,7 +225,7 @@ func mintInvite(flockName, name, role string) (string, error) {
 	if err := sr.Save(f.RosterPath); err != nil {
 		return "", err
 	}
-	return invite.Encode(&invite.Invite{
+	in := &invite.Invite{
 		Version:  invite.Version,
 		Roster:   *sr,
 		NodeID:   id,
@@ -214,7 +233,11 @@ func mintInvite(flockName, name, role string) (string, error) {
 		Role:     role,
 		SignSeed: machine.SignSeed,
 		KexSeed:  machine.KexSeed,
-	})
+	}
+	if role == flock.RoleMaster {
+		in.Flock = authority
+	}
+	return invite.Encode(in)
 }
 
 // acceptOffers takes on any connector that has registered itself since last time.
