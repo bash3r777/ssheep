@@ -4,32 +4,79 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
-<title>ssheep — one binary, one file, one key</title>
+<title>🐑 ssheep — one binary, one file, one key</title>
 <meta name="description" content="Command a flock of machines. One command sets it up. No open ports, no accounts, and nobody's server to trust.">
-<meta property="og:title" content="ssheep — one binary, one file, one key">
+<meta property="og:title" content="🐑 ssheep — one binary, one file, one key">
 <meta property="og:description" content="Command a flock of machines. One command sets it up.">
 <meta property="og:url" content="https://ssheep.xyz/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%90%91%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/style.css?v=3">
 </head>
 <body>
 
 <div class="vibe">
   <span class="hot">100% Vibe Coded!</span>
   <span class="bot"><span class="arm">🦾</span><span class="head">🤖</span><span class="arm flip">🦾</span></span>
-  <span>early prototype, no audit, not secure</span>
+  <span class="hot">Use at own Risk!</span>
 </div>
 
 <div class="v3">
 
   <header class="v3head">
-    <h1 class="big"><span class="sheep">🐑</span> SSHeep <span class="sheep">🐑</span></h1>
+    <h1 class="big">
+      <span class="sr">🐑 SSHeep 🐑</span>
+      <svg class="wordmark" viewBox="0 0 1000 190" width="1000" height="190" aria-hidden="true" focusable="false">
+        <text class="wm-word" x="195" y="145" textLength="610" lengthAdjust="spacing">SSHeep</text>
+
+        <g transform="translate(0,-11) scale(2)">
+          <rect x="28" y="56" width="7" height="24" rx="3" fill="#39424e"/>
+          <rect x="64" y="56" width="7" height="24" rx="3" fill="#39424e"/>
+          <g fill="#e6edf3">
+            <circle cx="50" cy="48" r="19"/>
+            <circle cx="33" cy="52" r="13"/>
+            <circle cx="67" cy="52" r="13"/>
+            <circle cx="40" cy="36" r="13"/>
+            <circle cx="59" cy="35" r="13"/>
+            <circle cx="26" cy="42" r="9"/>
+            <circle cx="74" cy="42" r="9"/>
+            <circle cx="50" cy="30" r="11"/>
+          </g>
+          <g fill="#39424e">
+            <ellipse cx="22" cy="40" rx="10.5" ry="11.5"/>
+            <ellipse cx="11" cy="30" rx="7.5" ry="4.2" transform="rotate(-25 11 30)"/>
+          </g>
+          <circle cx="19" cy="37" r="1.7" fill="#e6edf3"/>
+        </g>
+
+        <g transform="translate(1000,-11) scale(-2,2)">
+          <rect x="28" y="56" width="7" height="24" rx="3" fill="#39424e"/>
+          <rect x="64" y="56" width="7" height="24" rx="3" fill="#39424e"/>
+          <g fill="#e6edf3">
+            <circle cx="50" cy="48" r="19"/>
+            <circle cx="33" cy="52" r="13"/>
+            <circle cx="67" cy="52" r="13"/>
+            <circle cx="40" cy="36" r="13"/>
+            <circle cx="59" cy="35" r="13"/>
+            <circle cx="26" cy="42" r="9"/>
+            <circle cx="74" cy="42" r="9"/>
+            <circle cx="50" cy="30" r="11"/>
+          </g>
+          <g fill="#39424e">
+            <ellipse cx="22" cy="40" rx="10.5" ry="11.5"/>
+            <ellipse cx="11" cy="30" rx="7.5" ry="4.2" transform="rotate(-25 11 30)"/>
+          </g>
+          <circle cx="19" cy="37" r="1.7" fill="#e6edf3"/>
+        </g>
+      </svg>
+    </h1>
   </header>
 
   <div class="v3grid">
 
     <div class="pitch">
-      <p class="lede">Command your flock!</p>
+      <svg class="headline" viewBox="0 0 600 58" role="img" aria-label="Command your flock!">
+        <text x="0" y="48" textLength="600" lengthAdjust="spacing">Command your flock!</text>
+      </svg>
 
       <button class="cmd" type="button" data-copy="curl -fsSL https://ssheep.xyz/install.sh | sh">
         <span class="s">$</span> curl -fsSL https://ssheep.xyz/install.sh | sh
@@ -45,27 +92,18 @@
         <li><span class="ic">👀</span>See every machine, live, in one screen</li>
         <li><span class="ic">🔓</span>No open ports, no port forwarding</li>
         <li><span class="ic">🔑</span>One key per flock, and it stays offline</li>
-        <li><span class="ic">👑</span>More than one master, so the key is never alone</li>
-        <li><span class="ic">🙈</span>The relay cannot read a thing</li>
-        <li><span class="ic">🗂</span>Many flocks, and a machine can be in several</li>
+        <li><span class="ic">🙈</span>Connector cannot read a thing</li>
+        <li><span class="ic">🔒</span>Commands and their output are encrypted end to end</li>
         <li><span class="ic">📡</span>Any reachable machine can be the connector</li>
-        <li><span class="ic">🛟</span>More than one connector: losing one costs nothing</li>
         <li><span class="ic">🚫</span>Revoke a machine, and it is out in seconds</li>
         <li><span class="ic">🧰</span>One static binary, no dependencies</li>
-        <li><span class="ic">📴</span>The flock is a file — no server to maintain</li>
       </ul>
     </div>
 
     <div class="v3side">
       <div class="term"><div class="win">
         <div class="tbar"><i class="dt r"></i><i class="dt y"></i><i class="dt g"></i><span class="tt">ssheep</span></div>
-        <div class="termbody"><pre class="dash"><span class="agent">🦾🤖🦾</span>
-<span class="art">  █▀▀▀▀ █▀▀▀▀ █   █
-→ █▄▄▄▄ █▄▄▄▄ █▄▄▄█ █▀▀ █▀▀ █▀█
-      █     █ █   █ █▀  █▀  █▀▀
-  ▀▀▀▀▀ ▀▀▀▀▀ ▀   ▀ ▀▀▀ ▀▀▀ ▀</span>
-
-<span class="c"># Install SSHeep:</span>
+        <div class="termbody"><pre class="dash"><span class="c"># Install SSHeep:</span>
 <span class="cp" data-copy="curl -fsSL https://ssheep.xyz/install.sh | sh"><span class="p">curl</span> -fsSL https://ssheep.xyz/install.sh | sh</span>
 installing... 10%
 installing... 50%
@@ -74,132 +112,94 @@ Installation complete!
 
 <span class="c"># Create the Flock:</span>
 <span class="p">$</span> ssheep master flock "myflock"
-    <span class="g">👑</span>  You are Master — flock "myflock" created
+<span class="g">👑</span>  You are Master — flock "myflock" created
+    connector  relay.ssheep.xyz:7000
 
-    <span class="g">🐑</span> run this on each machine you want to be a Sheep <span class="g">🐑</span>:
-      curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "H4sIAAAA…"
+<span class="g">🐑</span> run this on each machine you want to be a Sheep <span class="g">🐑</span>:
 
-    <span class="g">📡</span> run this on each machine you want to be a Connector <span class="g">📡</span>:
-      curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "JSDFndSD…"
+  curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "H4sIAAAA…"
 
-    <span class="g">👑</span> run this on each machine you want to be a Master <span class="g">👑</span>:
-      curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "LLIfeDDd…"
+<span class="g">📡</span> run this on each machine you want to be a Connector <span class="g">📡</span>:
+
+  curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "JSDFndSD…"
+
+<span class="g">👑</span> run this on each machine you want to be a Master <span class="g">👑</span>:
+
+  curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "LLIfeDDd…"
 
 <span class="c"># Command the flock:</span>
 <span class="p">$</span> ssheep run "myflock" -- uptime
 sheep-1|  14:22:01 up 3 days,  2:14,  load average: 0.08
 sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
 <span class="c">❯</span> <span class="cur"></span></pre></div>
+
+        <div class="mapbox">
+          <svg class="dg" viewBox="0 0 520 366" role="img"
+               aria-label="One master above two flocks. Each flock has two connectors, and every sheep has a line to both of them. Some machines are a connector in one flock and a sheep in the other, and some are sheep in both, drawn in the same colour both times.">
+
+            <defs>
+              <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0 0 L10 5 L0 10 z" fill="#33465e"/>
+              </marker>
+            </defs>
+
+            <!-- one master -->
+            <rect class="box master" x="235" y="14" width="50" height="36" rx="8"/>
+            <text x="260" y="32" text-anchor="middle" dominant-baseline="middle">👑</text>
+            <path class="wire" d="M260 50 V80"/>
+            <path class="wire" d="M75 80 H455"/>
+            <path class="wire" d="M75 80 V140 M195 80 V140 M335 80 V140 M455 80 V140"/>
+            <g fill="#33465e">
+              <polygon points="75,140 70,130 80,130"/>
+              <polygon points="195,140 190,130 200,130"/>
+              <polygon points="335,140 330,130 340,130"/>
+              <polygon points="455,140 450,130 460,130"/>
+            </g>
+
+            <!-- two flocks -->
+            <rect class="flockbox" x="8" y="100" width="244" height="250" rx="10"/>
+            <text class="fname" x="20" y="120">flock "alpha"</text>
+            <rect class="flockbox" x="268" y="100" width="244" height="250" rx="10"/>
+            <text class="fname" x="280" y="120">flock "beta"</text>
+
+            <!-- two connectors each; dell and vps are a sheep somewhere else too -->
+            <rect class="box" x="25" y="140" width="100" height="34" rx="6"/>
+            <text class="sname" style="fill:#7ee787" x="75" y="157" text-anchor="middle" dominant-baseline="middle">📡 pi</text>
+            <rect class="sheep" style="stroke:#56d4dd" x="145" y="140" width="100" height="34" rx="6"/>
+            <text class="sname" style="fill:#56d4dd" x="195" y="157" text-anchor="middle" dominant-baseline="middle">📡🐑 dell</text>
+            <rect class="box" x="285" y="140" width="100" height="34" rx="6"/>
+            <text class="sname" style="fill:#e3b341" x="335" y="157" text-anchor="middle" dominant-baseline="middle">📡 phone</text>
+            <rect class="sheep" style="stroke:#f778ba" x="405" y="140" width="100" height="34" rx="6"/>
+            <text class="sname" style="fill:#f778ba" x="455" y="157" text-anchor="middle" dominant-baseline="middle">📡🐑 vps</text>
+
+            <!-- every sheep reaches both connectors -->
+            <path class="fan" d="M75 174 L55 290 M75 174 L140 290 M75 174 L225 290 M195 174 L55 290 M195 174 L140 290 M195 174 L225 290"/>
+            <path class="fan" d="M335 174 L315 290 M335 174 L400 290 M335 174 L485 290 M455 174 L315 290 M455 174 L400 290 M455 174 L485 290"/>
+
+            <!-- the sheep, by name and in colour -->
+            <rect class="sheep" style="stroke:#ffa657" x="20" y="290" width="70" height="32" rx="6"/>
+            <text class="sname" style="fill:#ffa657" x="55" y="306" text-anchor="middle" dominant-baseline="middle">🐑 nas</text>
+            <rect class="sheep" style="stroke:#d2a8ff" x="105" y="290" width="70" height="32" rx="6"/>
+            <text class="sname" style="fill:#d2a8ff" x="140" y="306" text-anchor="middle" dominant-baseline="middle">🐑 laptop</text>
+            <rect class="sheep" style="stroke:#f778ba" x="190" y="290" width="70" height="32" rx="6"/>
+            <text class="sname" style="fill:#f778ba" x="225" y="306" text-anchor="middle" dominant-baseline="middle">🐑 vps</text>
+
+            <rect class="sheep" style="stroke:#d2a8ff" x="280" y="290" width="70" height="32" rx="6"/>
+            <text class="sname" style="fill:#d2a8ff" x="315" y="306" text-anchor="middle" dominant-baseline="middle">🐑 laptop</text>
+            <rect class="sheep" style="stroke:#56d4dd" x="365" y="290" width="70" height="32" rx="6"/>
+            <text class="sname" style="fill:#56d4dd" x="400" y="306" text-anchor="middle" dominant-baseline="middle">🐑 dell</text>
+            <rect class="sheep" style="stroke:#ffa657" x="450" y="290" width="70" height="32" rx="6"/>
+            <text class="sname" style="fill:#ffa657" x="485" y="306" text-anchor="middle" dominant-baseline="middle">🐑 nas</text>
+          </svg>
+
+          <p class="mapcap">any machine can be a sheep — or a connector, or a master — in as many flocks as you like</p>
         </div>
       </div>
     </div>
 
+    </div>
+
   </div>
-
-  <p class="fhead" style="margin-top:36px">How it fits together</p>
-  <div class="diagram">
-    <svg class="dg" viewBox="0 0 1200 432" role="img"
-         aria-label="Two masters sharing one flock key. Below, two flocks. Each flock has two connectors, and every sheep reaches both of them. Flock alpha's sheep are pi, nas, laptop, tv and router; flock beta adds vps, phone, tablet and printer. nas and laptop are in both flocks: the same colour, joined by a dashed line.">
-
-      <defs>
-        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-          <path d="M0 0 L10 5 L0 10 z" fill="#d2a8ff"/>
-        </marker>
-      </defs>
-
-      <!-- the key lives on both masters -->
-      <rect class="box master" x="400" y="10" width="180" height="38" rx="7"/>
-      <text x="490" y="29" text-anchor="middle" dominant-baseline="middle">👑 🔒 master</text>
-      <rect class="box master" x="620" y="10" width="180" height="38" rx="7"/>
-      <text x="710" y="29" text-anchor="middle" dominant-baseline="middle">👑 🔒 master</text>
-
-      <!-- masters down to the relays -->
-      <path class="wire" d="M490 48 V78"/>
-      <path class="wire" d="M710 48 V78"/>
-      <path class="wire" d="M160 78 H1000"/>
-      <path class="wire" d="M160 78 V132"/>
-      <path class="wire" d="M400 78 V132"/>
-      <path class="wire" d="M760 78 V132"/>
-      <path class="wire" d="M1000 78 V132"/>
-      <g fill="#33465e">
-        <polygon points="160,132 155,122 165,122"/>
-        <polygon points="400,132 395,122 405,122"/>
-        <polygon points="760,132 755,122 765,122"/>
-        <polygon points="1000,132 995,122 1005,122"/>
-      </g>
-      <path class="flow" d="M160 166 V78 H600"/>
-      <path class="flow" d="M1000 166 V78 H600"/>
-
-      <!-- two flocks -->
-      <rect class="flockbox" x="30" y="100" width="540" height="230" rx="10"/>
-      <text class="fname" x="46" y="120">flock "alpha"</text>
-      <text class="lbl" x="200" y="120">every sheep is connected</text>
-      <rect class="flockbox" x="630" y="100" width="540" height="230" rx="10"/>
-      <text class="fname" x="646" y="120">flock "beta"</text>
-      <text class="lbl" x="800" y="120">every sheep is connected</text>
-
-      <!-- two connectors each, and every sheep reaches both of them -->
-      <rect class="box" x="75" y="132" width="170" height="34" rx="6"/>
-      <text x="160" y="149" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
-      <rect class="box" x="315" y="132" width="170" height="34" rx="6"/>
-      <text x="400" y="149" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
-      <rect class="box" x="675" y="132" width="170" height="34" rx="6"/>
-      <text x="760" y="149" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
-      <rect class="box" x="915" y="132" width="170" height="34" rx="6"/>
-      <text x="1000" y="149" text-anchor="middle" dominant-baseline="middle">📡 connector</text>
-
-      <!-- both connectors are joined, and each sheep has one line to the pair -->
-      <path class="bus" d="M110 196 H490 M160 166 V196 M400 166 V196 M120 270 V196 M210 270 V196 M300 270 V196 M390 270 V196 M480 270 V196"/>
-      <path class="bus" d="M670 196 H1130 M760 166 V196 M1000 166 V196 M680 270 V196 M768 270 V196 M856 270 V196 M944 270 V196 M1032 270 V196 M1120 270 V196"/>
-
-      <!-- the sheep, by name and in colour -->
-      <rect class="sheep" style="stroke:#7ee787" x="82" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#7ee787" x="120" y="286" text-anchor="middle" dominant-baseline="middle">🐑 pi</text>
-      <rect class="sheep" style="stroke:#ffa657" x="172" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#ffa657" x="210" y="286" text-anchor="middle" dominant-baseline="middle">🐑 nas</text>
-      <rect class="sheep" style="stroke:#d2a8ff" x="262" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#d2a8ff" x="300" y="286" text-anchor="middle" dominant-baseline="middle">🐑 laptop</text>
-      <rect class="sheep" style="stroke:#79c0ff" x="352" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#79c0ff" x="390" y="286" text-anchor="middle" dominant-baseline="middle">🐑 tv</text>
-      <rect class="sheep" style="stroke:#ff7b72" x="442" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#ff7b72" x="480" y="286" text-anchor="middle" dominant-baseline="middle">🐑 router</text>
-
-      <rect class="sheep" style="stroke:#56d4dd" x="642" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#56d4dd" x="680" y="286" text-anchor="middle" dominant-baseline="middle">🐑 vps</text>
-      <rect class="sheep" style="stroke:#ffa657" x="730" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#ffa657" x="768" y="286" text-anchor="middle" dominant-baseline="middle">🐑 nas</text>
-      <rect class="sheep" style="stroke:#d2a8ff" x="818" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#d2a8ff" x="856" y="286" text-anchor="middle" dominant-baseline="middle">🐑 laptop</text>
-      <rect class="sheep" style="stroke:#f778ba" x="906" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#f778ba" x="944" y="286" text-anchor="middle" dominant-baseline="middle">🐑 phone</text>
-      <rect class="sheep" style="stroke:#e3b341" x="994" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#e3b341" x="1032" y="286" text-anchor="middle" dominant-baseline="middle">🐑 tablet</text>
-      <rect class="sheep" style="stroke:#39d353" x="1082" y="270" width="76" height="32" rx="6"/>
-      <text class="sname" style="fill:#39d353" x="1120" y="286" text-anchor="middle" dominant-baseline="middle">🐑 printer</text>
-
-      <!-- the same machines, in both flocks -->
-      <path class="link" d="M210 302 V348 H768 V302" stroke="#ffa657"/>
-      <path class="link" d="M300 302 V378 H856 V302" stroke="#d2a8ff" marker-start="url(#ar)" marker-end="url(#ar)"/>
-      <text class="lbl" x="600" y="402" text-anchor="middle"><tspan style="fill:#ffa657">nas</tspan> and <tspan style="fill:#d2a8ff">laptop</tspan> are in both flocks</text>
-      <text class="lbl" x="600" y="422" text-anchor="middle">any machine can be a sheep — or a connector, or a master — in as many flocks as you like</text>
-    </svg>
-  </div>
-
-  <ul class="legend">
-    <li><span class="sw" style="background:var(--accent)"></span>master <span class="note">— holds the key, and there can be more than one</span></li>
-    <li><span class="sw" style="background:#8b98a5"></span>connector <span class="note">— a blind relay; the only machine that must be reachable</span></li>
-    <li><span class="sw" style="background:#d2a8ff"></span>dashed line <span class="note">— one machine, in both flocks</span></li>
-    <li><span class="sw" style="background:#7ee787"></span>pi</li>
-    <li><span class="sw" style="background:#ffa657"></span>nas <span class="note">— in both</span></li>
-    <li><span class="sw" style="background:#d2a8ff"></span>laptop <span class="note">— in both</span></li>
-    <li><span class="sw" style="background:#79c0ff"></span>tv</li>
-    <li><span class="sw" style="background:#ff7b72"></span>router</li>
-    <li><span class="sw" style="background:#56d4dd"></span>vps</li>
-    <li><span class="sw" style="background:#f778ba"></span>phone</li>
-    <li><span class="sw" style="background:#e3b341"></span>tablet</li>
-    <li><span class="sw" style="background:#39d353"></span>printer</li>
-  </ul>
-  <p class="hint">master → connector → sheep. Commands and their output are encrypted end to end, so a connector carries them without being able to read them.</p>
 
   <footer class="foot">
     <a href="/about">about</a>
@@ -225,6 +225,12 @@ document.addEventListener("click", function (e) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(t).then(done).catch(done);
   } else { done(); }
+});
+document.addEventListener("click", function (e) {
+  var a = e.target.closest(".btnrow a");
+  if (!a) return;
+  a.classList.add("lit");
+  setTimeout(function () { a.classList.remove("lit"); }, 400);
 });
 </script>
 </body>
