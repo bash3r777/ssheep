@@ -49,23 +49,19 @@ em { color: var(--fg); font-style: normal; }
 .vibe a:hover { color: var(--accent); text-decoration: none; }
 
 /* ── the wordmark: emoji sheep either side of a stretched word ─────────── */
-.v3 { max-width: 1080px; margin: 0 auto; padding: 6px 20px 12px; }
-.v3head { margin: 0 0 12px; }
+.v3 { max-width: 1080px; margin: 0 auto; padding: 0 20px 10px; }
+.v3head { margin: 0 0 4px; }
 .v3head .big { margin: 0; }
-.sr {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
-  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
-}
-.wordmark { display: block; width: 100%; height: auto; aspect-ratio: 1000 / 190; }
+.wordmark { display: block; width: 100%; height: auto; }
 .wordmark .wm-word {
   font-family: Verdana, Geneva, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 84px;
+  font-size: 100px;
   font-weight: 800;
   fill: var(--accent);
 }
 .wordmark .wm-sheep {
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Noto Emoji", sans-serif;
-  font-size: 102px;
+  font-size: 120px;
 }
 
 /* ── two columns: the pitch on the left, the terminal on the right ─────── */
@@ -98,7 +94,7 @@ em { color: var(--fg); font-style: normal; }
   border: 3px solid var(--accent);
   color: var(--fg);
   font: inherit;
-  font-size: clamp(10px, 1.3vw, 13.5px);
+  font-size: clamp(11px, 1.35vw, 14px);
   padding: 11px 15px;
   letter-spacing: -.01em;
   white-space: nowrap;
@@ -162,8 +158,8 @@ em { color: var(--fg); font-style: normal; }
 
 /* ── features: one line each ───────────────────────────────────────────── */
 .fhead { color: var(--accent); font-weight: 700; font-size: 12px; letter-spacing: .13em; text-transform: uppercase; margin: 24px 0 2px; }
-.feat { list-style: none; margin: 6px 0 0; padding: 0; color: #b8c4d0; font-size: 11.5px; line-height: 1.45; }
-.feat li { padding: 1px 0; border-top: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feat { list-style: none; margin: 6px 0 0; padding: 0; color: #b8c4d0; font-size: 12px; line-height: 1.5; }
+.feat li { padding: 2px 0; border-top: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .feat li:first-child { border-top: 0; }
 .feat li.wide { white-space: normal; overflow: visible; }
 @media (max-width: 620px) { .feat li { white-space: normal; overflow: visible; } }
@@ -180,8 +176,8 @@ em { color: var(--fg); font-style: normal; }
 .term .termbody pre.dash {
   margin: 0; font: inherit;
   font-family: "DejaVu Sans Mono", "Liberation Mono", "Courier New", monospace;
-  font-size: clamp(6px, 0.78vw, 8px);
-  line-height: 1.4;
+  font-size: clamp(6.5px, 0.85vw, 8.5px);
+  line-height: 1.45;
   white-space: pre;
   overflow-x: hidden;
 }
