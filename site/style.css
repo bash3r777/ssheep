@@ -48,7 +48,7 @@ em { color: var(--fg); font-style: normal; }
 .vibe a { color: var(--mut); border-bottom: 1px solid var(--line); }
 .vibe a:hover { color: var(--accent); text-decoration: none; }
 
-/* ── the wordmark: drawn, so the sheep never drift off the title ───────── */
+/* ── the wordmark: emoji sheep either side of a stretched word ─────────── */
 .v3 { max-width: 1080px; margin: 0 auto; padding: 26px 20px 64px; }
 .v3head { margin: 0 0 26px; }
 .v3head .big { margin: 0; }
@@ -62,6 +62,10 @@ em { color: var(--fg); font-style: normal; }
   font-size: 150px;
   font-weight: 800;
   fill: var(--accent);
+}
+.wordmark .wm-sheep {
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Noto Emoji", sans-serif;
+  font-size: 180px;
 }
 
 /* ── two columns: the pitch on the left, the terminal on the right ─────── */
@@ -161,6 +165,7 @@ em { color: var(--fg); font-style: normal; }
 .feat { list-style: none; margin: 6px 0 0; padding: 0; color: #b8c4d0; font-size: 13.5px; }
 .feat li { padding: 7px 0; border-top: 1px dashed var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .feat li:first-child { border-top: 0; }
+.feat li.wide { white-space: normal; overflow: visible; }
 @media (max-width: 620px) { .feat li { white-space: normal; overflow: visible; } }
 .feat .ic { display: inline-block; min-width: 1.5em; margin-right: .75em; }
 
@@ -201,6 +206,7 @@ em { color: var(--fg); font-style: normal; }
 .dg text { fill: var(--fg); font: 12px "Courier New", Courier, monospace; }
 .dg .lbl { fill: var(--mut); font-size: 10px; letter-spacing: .08em; }
 .dg .fname { fill: var(--accent); font-size: 11px; letter-spacing: .1em; }
+.dg .em { font-size: 16px; }
 .dg .wire { fill: none; stroke: var(--wire); stroke-width: 1.2; }
 .dg .fan { fill: none; stroke: #8b98a5; stroke-width: 1; opacity: .5; }
 .dg .flow { fill: none; stroke: var(--accent); stroke-width: 1.3; stroke-dasharray: 3 7; opacity: .85; animation: crawl 3.6s linear infinite; }
@@ -214,7 +220,6 @@ em { color: var(--fg); font-style: normal; }
 /* ── the map: the shape of a flock, under the terminal ─────────────────── */
 .mapbox { border-top: 1px solid var(--line); background: radial-gradient(120% 120% at 50% 0%, #0c131c, #080c11); padding: 14px 14px 12px; }
 .mapbox svg { display: block; width: 100%; height: auto; }
-.mapcap { color: #b8c4d0; font-size: 14px; line-height: 1.45; text-align: center; margin: 12px 0 0; }
 
 /* ── the about page: plain pre, tables, boxes ──────────────────────────── */
 .v3 pre.plain { background: var(--card); border: 1px solid var(--line); padding: 11px 13px; font-size: 12px; line-height: 1.55; margin: 10px 0; }
