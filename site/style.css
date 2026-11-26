@@ -59,13 +59,13 @@ em { color: var(--fg); font-style: normal; }
 .wordmark { display: block; width: 100%; height: auto; aspect-ratio: 1000 / 190; }
 .wordmark .wm-word {
   font-family: Verdana, Geneva, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 150px;
+  font-size: 132px;
   font-weight: 800;
   fill: var(--accent);
 }
 .wordmark .wm-sheep {
   font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Noto Emoji", sans-serif;
-  font-size: 180px;
+  font-size: 158px;
 }
 
 /* ── two columns: the pitch on the left, the terminal on the right ─────── */
