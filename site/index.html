@@ -10,7 +10,7 @@
 <meta property="og:description" content="Command a flock of machines. One command sets it up.">
 <meta property="og:url" content="https://ssheep.xyz/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%90%91%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="/style.css?v=9">
+<link rel="stylesheet" href="/style.css?v=17">
 </head>
 <body>
 
@@ -25,10 +25,10 @@
   <header class="v3head">
     <h1 class="big">
       <span class="sr">🐑 SSHeep 🐑</span>
-      <svg class="wordmark" viewBox="0 0 1000 186" width="1000" height="186" aria-hidden="true" focusable="false">
-        <text class="wm-sheep" x="0" y="156">🐑</text>
-        <text class="wm-word" x="240" y="150" textLength="520" lengthAdjust="spacing">SSHeep</text>
-        <text class="wm-sheep" x="1000" y="156" text-anchor="end">🐑</text>
+      <svg class="wordmark" viewBox="0 0 1000 114" width="1000" height="114" aria-hidden="true" focusable="false">
+        <text class="wm-sheep" x="0" y="94">🐑</text>
+        <text class="wm-word" x="310" y="88" textLength="380" lengthAdjust="spacing">SSHeep</text>
+        <text class="wm-sheep" x="1000" y="94" text-anchor="end">🐑</text>
       </svg>
     </h1>
   </header>
@@ -89,7 +89,7 @@ sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
 <span class="c">❯</span> <span class="cur"></span></pre></div>
 
         <div class="mapbox">
-          <svg class="dg" viewBox="0 0 520 288" role="img"
+          <svg class="dg" viewBox="0 0 620 146" role="img"
                aria-label="One master above two flocks. Each flock has two connectors and three sheep, every sheep joined to both connectors, and two machines are a connector in one flock and a sheep in the other.">
 
             <defs>
@@ -99,55 +99,55 @@ sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
             </defs>
 
             <!-- one master -->
-            <rect class="box master" x="238" y="8" width="44" height="34" rx="8"/>
-            <text class="em" x="260" y="26" text-anchor="middle" dominant-baseline="middle">👑</text>
-            <path class="wire" d="M260 42 V64"/>
-            <path class="wire" d="M75 64 H455"/>
-            <path class="wire" d="M75 64 V118 M195 64 V118 M335 64 V118 M455 64 V118"/>
+            <rect class="box master" x="290" y="2" width="40" height="22" rx="6"/>
+            <text class="em" x="310" y="13" text-anchor="middle" dominant-baseline="middle">👑</text>
+            <path class="wire" d="M310 24 V32"/>
+            <path class="wire" d="M95 32 H525"/>
+            <path class="wire" d="M95 32 V58 M235 32 V58 M385 32 V58 M525 32 V58"/>
             <g fill="#33465e">
-              <polygon points="75,118 70,108 80,108"/>
-              <polygon points="195,118 190,108 200,108"/>
-              <polygon points="335,118 330,108 340,108"/>
-              <polygon points="455,118 450,108 460,108"/>
+              <polygon points="95,58 90,48 100,48"/>
+              <polygon points="235,58 230,48 240,48"/>
+              <polygon points="385,58 380,48 390,48"/>
+              <polygon points="525,58 520,48 530,48"/>
             </g>
 
             <!-- two flocks -->
-            <rect class="flockbox" x="8" y="84" width="244" height="196" rx="10"/>
-            <rect class="flockbox" x="268" y="84" width="244" height="196" rx="10"/>
+            <rect class="flockbox" x="10" y="40" width="290" height="100" rx="9"/>
+            <text class="fname" x="22" y="52">flock 1</text>
+            <rect class="flockbox" x="320" y="40" width="290" height="100" rx="9"/>
+            <text class="fname" x="332" y="52">flock 2</text>
 
             <!-- two connectors each; two of them are a sheep somewhere else -->
-            <rect class="box" x="29" y="118" width="92" height="32" rx="8"/>
-            <text class="em" x="75" y="135" text-anchor="middle" dominant-baseline="middle">📡</text>
-            <rect class="sheep" style="stroke:#56d4dd" x="149" y="118" width="92" height="32" rx="8"/>
-            <text class="em" x="195" y="135" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
-            <rect class="box" x="291" y="118" width="92" height="32" rx="8"/>
-            <text class="em" x="335" y="135" text-anchor="middle" dominant-baseline="middle">📡</text>
-            <rect class="sheep" style="stroke:#f778ba" x="411" y="118" width="92" height="32" rx="8"/>
-            <text class="em" x="455" y="135" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
+            <rect class="box" x="55" y="58" width="80" height="22" rx="6"/>
+            <text class="em" x="95" y="69" text-anchor="middle" dominant-baseline="middle">📡</text>
+            <rect class="sheep" style="stroke:#56d4dd" x="195" y="58" width="80" height="22" rx="6"/>
+            <text class="em" x="235" y="69" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
+            <rect class="box" x="345" y="58" width="80" height="22" rx="6"/>
+            <text class="em" x="385" y="69" text-anchor="middle" dominant-baseline="middle">📡</text>
+            <rect class="sheep" style="stroke:#f778ba" x="485" y="58" width="80" height="22" rx="6"/>
+            <text class="em" x="525" y="69" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
 
             <!-- every sheep reaches both connectors -->
-            <path class="fan" d="M75 150 L55 240 M75 150 L140 240 M75 150 L225 240 M195 150 L55 240 M195 150 L140 240 M195 150 L225 240"/>
-            <path class="fan" d="M335 150 L315 240 M335 150 L400 240 M335 150 L485 240 M455 150 L315 240 M455 150 L400 240 M455 150 L485 240"/>
+            <path class="fan" d="M95 80 L65 112 M95 80 L155 112 M95 80 L245 112 M235 80 L65 112 M235 80 L155 112 M235 80 L245 112"/>
+            <path class="fan" d="M385 80 L335 112 M385 80 L425 112 M385 80 L515 112 M525 80 L335 112 M525 80 L425 112 M525 80 L515 112"/>
 
             <!-- the sheep: colour is the whole of the label -->
-            <rect class="sheep" style="stroke:#ffa657" x="23" y="240" width="64" height="30" rx="8"/>
-            <text class="em" x="55" y="256" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#d2a8ff" x="108" y="240" width="64" height="30" rx="8"/>
-            <text class="em" x="140" y="256" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#f778ba" x="193" y="240" width="64" height="30" rx="8"/>
-            <text class="em" x="225" y="256" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#ffa657" x="38" y="112" width="54" height="22" rx="6"/>
+            <text class="em" x="65" y="123" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#d2a8ff" x="128" y="112" width="54" height="22" rx="6"/>
+            <text class="em" x="155" y="123" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#f778ba" x="218" y="112" width="54" height="22" rx="6"/>
+            <text class="em" x="245" y="123" text-anchor="middle" dominant-baseline="middle">🐑</text>
 
-            <rect class="sheep" style="stroke:#d2a8ff" x="283" y="240" width="64" height="30" rx="8"/>
-            <text class="em" x="315" y="256" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#56d4dd" x="368" y="240" width="64" height="30" rx="8"/>
-            <text class="em" x="400" y="256" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#ffa657" x="453" y="240" width="64" height="30" rx="8"/>
-            <text class="em" x="485" y="256" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#d2a8ff" x="308" y="112" width="54" height="22" rx="6"/>
+            <text class="em" x="335" y="123" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#56d4dd" x="398" y="112" width="54" height="22" rx="6"/>
+            <text class="em" x="425" y="123" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#ffa657" x="488" y="112" width="54" height="22" rx="6"/>
+            <text class="em" x="515" y="123" text-anchor="middle" dominant-baseline="middle">🐑</text>
           </svg>
         </div>
-      </div>
-    </div>
-
+      </div></div>
     </div>
 
   </div>
