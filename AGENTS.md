@@ -112,3 +112,13 @@ make cross
 
 `site/install.sh` downloads `ssheep-<os>-<arch>` from the latest release, so the
 asset names must match `make cross`.
+
+**A release is part of shipping, not an afterthought.** The printed one-liner runs
+`ssheep join`, so a release older than the `join` command makes every line the site
+prints fail with `unknown command "join"` — after a cheerful "Installation
+complete!". Tag first, then `make cross` (it stamps the version from
+`git describe`), then attach the six binaries.
+
+GitHub caches the `releases/latest/download/...` redirect for a few minutes after a
+new release is published. Until it clears, that URL still serves the *previous*
+release, even though `/releases/latest` already reports the new one as latest.
