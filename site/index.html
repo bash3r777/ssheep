@@ -10,7 +10,7 @@
 <meta property="og:description" content="Command a flock of machines. One command sets it up.">
 <meta property="og:url" content="https://ssheep.xyz/">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E%F0%9F%90%91%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="/style.css?v=27">
+<link rel="stylesheet" href="/style.css?v=29">
 </head>
 <body>
 
@@ -24,10 +24,10 @@
 
   <header class="v3head">
     <h1 class="big" aria-label="SSHeep">
-      <svg class="wordmark" viewBox="0 0 1000 118" width="1000" height="118" role="img" aria-label="🐑 SSHeep 🐑">
-        <text class="wm-sheep" x="80" y="98">🐑</text>
-        <text class="wm-word" x="290" y="92" textLength="420" lengthAdjust="spacing">SSHeep</text>
-        <text class="wm-sheep" x="920" y="98" text-anchor="end">🐑</text>
+      <svg class="wordmark" viewBox="0 0 1000 128" width="1000" height="128" role="img" aria-label="🐑 SSHeep 🐑">
+        <text class="wm-sheep" x="80" y="104">🐑</text>
+        <text class="wm-word" x="275" y="98" textLength="450" lengthAdjust="spacing">SSHeep</text>
+        <text class="wm-sheep" x="920" y="104" text-anchor="end">🐑</text>
       </svg>
     </h1>
   </header>
@@ -66,14 +66,14 @@
 
     <div class="v3side">
       <div class="term"><div class="win">
-        <div class="tbar"><i class="dt r"></i><i class="dt y"></i><i class="dt g"></i><span class="tt">ssheep</span></div>
+        <div class="tbar"><i class="dt r"></i><i class="dt y"></i><i class="dt g"></i></div>
         <div class="termbody"><pre class="dash"><span class="c"># Create the Flock:</span>
 <span class="p">$</span> ssheep master flock "myflock"
 <span class="g">👑</span>  You are Master — flock "myflock" created
     connector  relay.ssheep.xyz:7000
 
 <span class="g">🐑</span> run this on each machine you want to be a Sheep <span class="g">🐑</span>:
-  <span class="cp" data-copy="curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket 'H4sIAAAA…'">curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "H4sIAAAA…"</span>
+  curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "H4sIAAAA…"
 
 <span class="g">📡</span> run this on each machine you want to be a Connector <span class="g">📡</span>:
   curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "JSDFndSD…"
@@ -88,8 +88,8 @@ sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
 <span class="c">❯</span> <span class="cur"></span></pre></div>
 
         <div class="mapbox">
-          <svg class="dg" viewBox="0 0 620 220" role="img"
-               aria-label="One master above two flocks. Each flock has two connectors and three sheep, every sheep joined to both connectors, and two machines are a connector in one flock and a sheep in the other.">
+          <svg class="dg" viewBox="0 0 620 210" role="img"
+               aria-label="One master above two flocks. Flock 1 has one connector and flock 2 has two, and every sheep is joined to every connector in its own flock.">
 
             <defs>
               <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -98,52 +98,49 @@ sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
             </defs>
 
             <!-- one master -->
-            <rect class="box master" x="290" y="2" width="40" height="30" rx="7"/>
-            <text class="em" x="310" y="17" text-anchor="middle" dominant-baseline="middle">👑</text>
-            <path class="wire" d="M310 32 V48"/>
-            <path class="wire" d="M95 48 H525"/>
-            <path class="wire" d="M95 48 V90 M235 48 V90 M385 48 V90 M525 48 V90"/>
+            <rect class="box master" x="290" y="2" width="40" height="28" rx="7"/>
+            <text class="em" x="310" y="16" text-anchor="middle" dominant-baseline="middle">👑</text>
+            <path class="wire" d="M310 30 V46"/>
+            <path class="wire" d="M155 46 H525"/>
+            <path class="wire" d="M155 46 V88 M385 46 V88 M525 46 V88"/>
             <g fill="#33465e">
-              <polygon points="95,90 90,80 100,80"/>
-              <polygon points="235,90 230,80 240,80"/>
-              <polygon points="385,90 380,80 390,80"/>
-              <polygon points="525,90 520,80 530,80"/>
+              <polygon points="155,88 150,78 160,78"/>
+              <polygon points="385,88 380,78 390,78"/>
+              <polygon points="525,88 520,78 530,78"/>
             </g>
 
             <!-- two flocks -->
-            <rect class="flockbox" x="10" y="58" width="290" height="152" rx="9"/>
-            <text class="fname" x="22" y="74">flock 1</text>
-            <rect class="flockbox" x="320" y="58" width="290" height="152" rx="9"/>
-            <text class="fname" x="332" y="74">flock 2</text>
+            <rect class="flockbox" x="10" y="54" width="290" height="146" rx="9"/>
+            <text class="fname" x="22" y="70">flock 1</text>
+            <rect class="flockbox" x="320" y="54" width="290" height="146" rx="9"/>
+            <text class="fname" x="332" y="70">flock 2</text>
 
-            <!-- two connectors each; two of them are a sheep somewhere else -->
-            <rect class="box" x="55" y="90" width="80" height="30" rx="6"/>
-            <text class="em" x="95" y="105" text-anchor="middle" dominant-baseline="middle">📡</text>
-            <rect class="sheep" style="stroke:#56d4dd" x="195" y="90" width="80" height="30" rx="6"/>
-            <text class="em" x="235" y="105" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
-            <rect class="box" x="345" y="90" width="80" height="30" rx="6"/>
-            <text class="em" x="385" y="105" text-anchor="middle" dominant-baseline="middle">📡</text>
-            <rect class="sheep" style="stroke:#f778ba" x="485" y="90" width="80" height="30" rx="6"/>
-            <text class="em" x="525" y="105" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
+            <!-- one connector here, two there: as many as you like -->
+            <rect class="box" x="115" y="88" width="80" height="28" rx="6"/>
+            <text class="em" x="155" y="102" text-anchor="middle" dominant-baseline="middle">📡</text>
+            <rect class="box" x="345" y="88" width="80" height="28" rx="6"/>
+            <text class="em" x="385" y="102" text-anchor="middle" dominant-baseline="middle">📡</text>
+            <rect class="sheep" style="stroke:#f778ba" x="485" y="88" width="80" height="28" rx="6"/>
+            <text class="em" x="525" y="102" text-anchor="middle" dominant-baseline="middle">📡🐑</text>
 
-            <!-- every sheep reaches both connectors -->
-            <path class="fan" d="M95 120 L65 160 M95 120 L155 160 M95 120 L245 160 M235 120 L65 160 M235 120 L155 160 M235 120 L245 160"/>
-            <path class="fan" d="M385 120 L335 160 M385 120 L425 160 M385 120 L515 160 M525 120 L335 160 M525 120 L425 160 M525 120 L515 160"/>
+            <!-- every sheep reaches every connector in its flock -->
+            <path class="fan" d="M155 116 L65 154 M155 116 L155 154 M155 116 L245 154"/>
+            <path class="fan" d="M385 116 L335 154 M385 116 L425 154 M385 116 L515 154 M525 116 L335 154 M525 116 L425 154 M525 116 L515 154"/>
 
             <!-- the sheep: colour is the whole of the label -->
-            <rect class="sheep" style="stroke:#ffa657" x="38" y="160" width="54" height="30" rx="6"/>
-            <text class="em" x="65" y="175" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#d2a8ff" x="128" y="160" width="54" height="30" rx="6"/>
-            <text class="em" x="155" y="175" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#f778ba" x="218" y="160" width="54" height="30" rx="6"/>
-            <text class="em" x="245" y="175" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#ffa657" x="38" y="154" width="54" height="28" rx="6"/>
+            <text class="em" x="65" y="168" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#d2a8ff" x="128" y="154" width="54" height="28" rx="6"/>
+            <text class="em" x="155" y="168" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#f778ba" x="218" y="154" width="54" height="28" rx="6"/>
+            <text class="em" x="245" y="168" text-anchor="middle" dominant-baseline="middle">🐑</text>
 
-            <rect class="sheep" style="stroke:#d2a8ff" x="308" y="160" width="54" height="30" rx="6"/>
-            <text class="em" x="335" y="175" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#56d4dd" x="398" y="160" width="54" height="30" rx="6"/>
-            <text class="em" x="425" y="175" text-anchor="middle" dominant-baseline="middle">🐑</text>
-            <rect class="sheep" style="stroke:#ffa657" x="488" y="160" width="54" height="30" rx="6"/>
-            <text class="em" x="515" y="175" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#d2a8ff" x="308" y="154" width="54" height="28" rx="6"/>
+            <text class="em" x="335" y="168" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#56d4dd" x="398" y="154" width="54" height="28" rx="6"/>
+            <text class="em" x="425" y="168" text-anchor="middle" dominant-baseline="middle">🐑</text>
+            <rect class="sheep" style="stroke:#ffa657" x="488" y="154" width="54" height="28" rx="6"/>
+            <text class="em" x="515" y="168" text-anchor="middle" dominant-baseline="middle">🐑</text>
           </svg>
         </div>
       </div></div>
