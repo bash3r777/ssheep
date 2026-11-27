@@ -27,6 +27,7 @@ import (
 	"ssheep.xyz/internal/frame"
 	"ssheep.xyz/internal/peer"
 	"ssheep.xyz/internal/proto"
+	"ssheep.xyz/internal/sshd"
 	"ssheep.xyz/internal/tunnel"
 )
 
@@ -303,7 +304,7 @@ func (a *Agent) serveConnector(r *runner) error {
 		return nil
 	}
 
-	l := &link{addr: c.Addr, conn: conn, sessions: map[string]*tunnel.Session{}}
+	l := &link{addr: c.Addr, conn: conn, sessions: map[string]*tunnel.Session{}, shells: map[string]*tunnel.Conn{}}
 	log.Printf("sheep: connected to %s", c.Addr)
 
 	// Ask for the current roster: the flock may have grown or shrunk since the
@@ -376,6 +377,7 @@ type link struct {
 
 	mu       sync.Mutex
 	sessions map[string]*tunnel.Session
+	shells   map[string]*tunnel.Conn
 }
 
 func (l *link) setSession(id string, s *tunnel.Session) {
@@ -388,6 +390,32 @@ func (l *link) session(id string) *tunnel.Session {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.sessions[id]
+}
+
+func (l *link) setShell(id string, c *tunnel.Conn) {
+	l.mu.Lock()
+	if c == nil {
+		delete(l.shells, id)
+	} else {
+		l.shells[id] = c
+	}
+	l.mu.Unlock()
+}
+
+func (l *link) shell(id string) *tunnel.Conn {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.shells[id]
+}
+
+// clearShell only clears the entry if it is still this stream. A finished shell
+// must not unregister a newer one that has already replaced it.
+func (l *link) clearShell(id string, c *tunnel.Conn) {
+	l.mu.Lock()
+	if l.shells[id] == c {
+		delete(l.shells, id)
+	}
+	l.mu.Unlock()
 }
 
 func (a *Agent) handle(l *link, from string, payload []byte) {
@@ -424,9 +452,64 @@ func (a *Agent) handle(l *link, from string, payload []byte) {
 		if err := tunnel.ParseMsg(plain, &msg); err != nil {
 			return
 		}
-		if msg.Kind == tunnel.KindExec {
+		switch msg.Kind {
+		case tunnel.KindExec:
 			go a.exec(l, from, sess, msg.Argv)
+
+		case tunnel.KindShell:
+			// The stream is registered here, synchronously, before this loop goes
+			// back to reading. The bytes of the ssh handshake are already on
+			// their way, and a message that arrives before the stream exists
+			// would be dropped — which showed up as a shell that worked only
+			// sometimes.
+			if old := l.shell(from); old != nil {
+				// A previous session whose master never said goodbye: killed, or
+				// a laptop that went to sleep. Replacing it is tidier than
+				// leaving a shell running with nobody attached, and it means the
+				// next attempt is never locked out by the last one.
+				_ = old.Close()
+			}
+			conn := tunnel.NewConn(func(msg *tunnel.Msg) error {
+				return a.sendMsgErr(l, from, sess, msg)
+			})
+			l.setShell(from, conn)
+			go a.serveShell(l, from, conn)
+
+		case tunnel.KindBytes:
+			if c := l.shell(from); c != nil {
+				// Push blocks when the shell is behind, and that is deliberate:
+				// it travels back through the tunnel as backpressure rather than
+				// filling memory or dropping a byte of somebody's terminal.
+				c.Push(msg.Data)
+			}
+
+		case tunnel.KindEof:
+			// The far end is done with this stream. Closing it ends the ssh
+			// connection, which is what makes the server shut down and hang up
+			// the shell rather than leaving it running with nobody attached.
+			if c := l.shell(from); c != nil {
+				_ = c.Close()
+			}
 		}
+	}
+}
+
+// serveShell runs the ssh server for one session.
+func (a *Agent) serveShell(l *link, from string, conn *tunnel.Conn) {
+	defer l.clearShell(from, conn)
+	defer conn.Close()
+
+	// The one thing a command cannot tell you: which flock this is, and what
+	// this machine is called in it.
+	env := []string{"SSHEEP=1"}
+	if a.flock != "" {
+		env = append(env, "SSHEEP_FLOCK="+a.flock)
+	}
+	if a.name != "" {
+		env = append(env, "SSHEEP_NODE="+a.name)
+	}
+	if err := sshd.Serve(conn, env); err != nil {
+		log.Printf("sheep: shell with %s ended: %v", from, err)
 	}
 }
 
@@ -486,23 +569,35 @@ func (a *Agent) exec(l *link, from string, sess *tunnel.Session, argv []string) 
 }
 
 func (a *Agent) sendMsg(l *link, to string, sess *tunnel.Session, msg *tunnel.Msg) {
+	_ = a.sendMsgErr(l, to, sess, msg)
+}
+
+// sendMsgErr is sendMsg for callers that have to know whether it worked. A
+// shell cannot carry on quietly if a byte of its stream went missing.
+func (a *Agent) sendMsgErr(l *link, to string, sess *tunnel.Session, msg *tunnel.Msg) error {
 	plain, err := tunnel.MarshalMsg(msg)
 	if err != nil {
-		return
+		return err
 	}
 	ct, err := sess.Seal(plain)
 	if err != nil {
-		return
+		return err
 	}
-	a.sendWire(l, to, &tunnel.Wire{Kind: tunnel.KindEnc, CT: ct})
+	return a.sendWireErr(l, to, &tunnel.Wire{Kind: tunnel.KindEnc, CT: ct})
 }
 
 func (a *Agent) sendWire(l *link, to string, w *tunnel.Wire) {
-	raw, err := tunnel.MarshalWire(w)
-	if err != nil {
-		return
-	}
-	if err := peer.Send(l.conn, peer.RouteTo(to, raw)); err != nil {
+	if err := a.sendWireErr(l, to, w); err != nil {
 		log.Printf("sheep: connector %s: %v", l.addr, err)
 	}
+}
+
+// sendWireErr is sendWire for callers that need to know whether it arrived. A
+// shell cannot quietly lose a byte of somebody's terminal.
+func (a *Agent) sendWireErr(l *link, to string, w *tunnel.Wire) error {
+	raw, err := tunnel.MarshalWire(w)
+	if err != nil {
+		return err
+	}
+	return peer.Send(l.conn, peer.RouteTo(to, raw))
 }

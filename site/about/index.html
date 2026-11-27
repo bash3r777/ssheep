@@ -106,6 +106,20 @@ ssheep flock list              # every flock this machine knows</pre>
   master tickets as you can bear, and keep each one at least as safe as the machine you
   run ssheep from.</p>
 
+  <h2>A shell on any machine</h2>
+  <p><code>ssheep shell "myflock" --name pi</code> puts a terminal on one machine, and
+  <code>… -- htop</code> runs one command with a terminal. It is a real ssh session — the
+  window size, <code>^C</code>, colours and exit status all work — but the ssh server runs
+  <em>inside</em> the encrypted tunnel rather than on a port.</p>
+  <p>That is where the unusual part is: there is no sshd to install on the machine, no
+  <code>authorized_keys</code> to copy, no <code>known_hosts</code> and no first-use trust,
+  and nothing listening. The machine is whoever the signed roster says it is, and the
+  flock key is what proves it — which is also why ssh's own authentication is switched
+  off: the tunnel already asked who is calling, and only a master can get that far.</p>
+  <p class="muted">The shell runs as the user the agent runs as, so run the agent as
+  yourself — a systemd user unit is the tidy way — and a shell here is your own
+  environment, dotfiles and all. Linux and macOS only, since it needs a pty.</p>
+
   <h2>How a connector finds its own address</h2>
   <p>A master cannot know a connector's address in advance — the connector is the machine
   with the public address, and the master has never spoken to it. So the connector says so
@@ -135,7 +149,7 @@ ssheep flock list              # every flock this machine knows</pre>
   has run a connector of their own.</p>
 
   <h2>What is missing</h2>
-  <p>Direct peer-to-peer connections, an interactive shell, and file transfer. Today every
+  <p>File transfer and port forwarding, and direct peer-to-peer connections. Today every
   byte goes through a connector, and <code>run</code> executes a command and streams its
   output back. Online and offline is reported per connector, so with several connectors a
   machine connected to a different one can look offline. The relay path is the floor;

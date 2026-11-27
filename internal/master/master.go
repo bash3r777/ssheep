@@ -47,9 +47,14 @@ type Client struct {
 
 // peerChan carries everything arriving from one machine: tunnel messages, and
 // errors the connector raised about reaching it.
+//
+// block says what to do when the reader is behind. For a command, the answer is
+// to drop: the output is a progress report and the connection must not stall.
+// For a shell it is to wait, because a missing byte is a corrupted terminal.
 type peerChan struct {
 	wires chan *tunnel.Wire
 	errs  chan error
+	block bool
 }
 
 // Open connects this machine to the flock.
@@ -192,6 +197,16 @@ func (c *Client) readLoop() {
 				continue
 			}
 			c.deliver(d.From, func(pc *peerChan) bool {
+				if pc.block {
+					// A shell cannot have bytes dropped, so this waits, and the
+					// wait travels back through the connector as backpressure.
+					select {
+					case pc.wires <- w:
+						return true
+					case <-c.closed:
+						return false
+					}
+				}
 				select {
 				case pc.wires <- w:
 					return true
@@ -328,41 +343,12 @@ func (c *Client) runOne(name string, argv []string, out io.Writer, multi bool) e
 		stderr = stdout
 	}
 
-	w1, pending, err := tunnel.Initiate(c.priv, c.me, m.ID)
+	sess, err := c.openSession(m, pc)
 	if err != nil {
-		return err
-	}
-	if err := c.sendWire(m.ID, w1); err != nil {
 		return err
 	}
 
-	var sess *tunnel.Session
-	select {
-	case w := <-pc.wires:
-		if w.Kind != tunnel.KindKex2 {
-			return errors.New("the machine sent an unexpected handshake reply")
-		}
-		sess, err = pending.Complete(ed25519.PublicKey(m.SignKey), w)
-		if err != nil {
-			return err
-		}
-	case err := <-pc.errs:
-		return err
-	case <-time.After(handshakeTimeout):
-		return errors.New("timed out waiting for the machine")
-	case <-c.closed:
-		return errors.New("lost the connector")
-	}
-
-	plain, err := tunnel.MarshalMsg(&tunnel.Msg{Kind: tunnel.KindExec, Argv: argv})
-	if err != nil {
-		return err
-	}
-	ct, err := sess.Seal(plain)
-	if err != nil {
-		return err
-	}
-	if err := c.sendWire(m.ID, &tunnel.Wire{Kind: tunnel.KindEnc, CT: ct}); err != nil {
+	if err := c.sendMsg(m.ID, sess, &tunnel.Msg{Kind: tunnel.KindExec, Argv: argv}); err != nil {
 		return err
 	}
 

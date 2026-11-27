@@ -57,6 +57,7 @@ const usage = `ssheep — one binary, one file, one key.
 
   see [<flock>]              the flocks, live
   run <flock> -- <cmd>       run a command on every sheep in a flock
+  shell <flock> --name N     open a shell on one machine
   forget <flock> --name N    revoke a machine
   flock list                 the flocks this machine knows
 
@@ -94,6 +95,8 @@ func main() {
 		err = cmdSee(rest)
 	case "run":
 		err = cmdRun(rest)
+	case "shell":
+		err = cmdShell(rest)
 	case "forget":
 		err = cmdForget(rest)
 	case "invite":
@@ -758,6 +761,60 @@ func cmdRun(args []string) error {
 		}
 	}
 	return cl.Run(targets, argv, os.Stdout)
+}
+
+// ---------------------------------------------------------------------------
+// shell
+// ---------------------------------------------------------------------------
+
+// cmdShell opens an interactive session on one machine.
+//
+// It is the same flock key, the same encrypted session and the same relay as a
+// command. The only difference is that the conversation on top of it is ssh, so
+// there is a real terminal at both ends — and still nothing listening on the
+// machine you are talking to.
+func cmdShell(args []string) error {
+	flockName, rest, err := flockArg(newFlagSet("shell"), args, "shell")
+	if err != nil {
+		return err
+	}
+	fs := newFlagSet("shell")
+	names := fs.String("name", "", "the machine to open a shell on")
+	conn := fs.String("connector", "", "use this connector instead of the flock's first")
+	if err := fs.Parse(rest); err != nil {
+		return err
+	}
+	f, err := local.Resolve(flockName)
+	if err != nil {
+		return err
+	}
+	cl, err := master.Open(f.RosterPath, f.NodePath, *conn)
+	if err != nil {
+		return err
+	}
+	defer cl.Close()
+
+	name := *names
+	if name == "" {
+		// One sheep is not a choice, so it does not need making.
+		sheep := cl.SheepNames()
+		if len(sheep) == 1 {
+			name = sheep[0]
+		} else if len(sheep) == 0 {
+			return fmt.Errorf("shell: flock %q has no sheep yet", f.Name)
+		} else {
+			return fmt.Errorf("shell: which machine? --name one of:\n\n  %s", strings.Join(sheep, "\n  "))
+		}
+	}
+
+	err = cl.Shell(name, fs.Args(), os.Stdin, os.Stdout)
+	var ee *master.ExitError
+	if errors.As(err, &ee) {
+		// A session that ended non-zero is the command's business, not a failure
+		// of ssheep. Pass the status on the way ssh does, and say nothing.
+		os.Exit(ee.Code)
+	}
+	return err
 }
 
 func cmdForget(args []string) error {

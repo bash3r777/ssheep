@@ -239,14 +239,61 @@ Adding connectors makes the flock harder to take down. It does not make it
 faster and it does not make it more private — it just means no single machine
 can end it.
 
+## The shell
+
+`ssheep shell` puts a terminal on one machine. It is a real ssh session — pty,
+window size, `^C`, colours, exit status — but the ssh server it talks to **runs
+inside the tunnel**, not on a port. There is no sshd on the machine, nothing to
+configure, and nothing to scan.
+
+The layering is deliberate:
+
+- **ssh carries the session, not the trust.** The tunnel has already answered who
+  is asking: only a member the roster lists as a master can complete the
+  handshake, and the relay sees ciphertext either way. So the ssh server is
+  configured with no client authentication, and the client does not check host
+  keys. Both would be a second, weaker answer to a question already answered — and
+  the host key is generated per connection and thrown away, so there is nothing to
+  pin and nothing to lose.
+- **A pty on the far side, raw mode on this one.** The sheep allocates a real pty
+  and runs the command as the user the agent runs as. The master puts your
+  terminal into raw mode, asks for the window size, and forwards resizes.
+- **No terminal asked for, none given.** A script piping a command through
+  `ssheep shell` gets the bytes the command wrote, not a terminal's line endings
+  and echo.
+- **Backpressure, not buffering.** Both ends block when the reader is behind, so a
+  command printing faster than the terminal can show pushes back through the
+  connector instead of filling memory. A shell is never allowed to silently drop
+  a byte.
+- **It says goodbye.** The stream is opened and closed explicitly, so a finished
+  session hangs up the shell rather than leaving it running with nobody attached.
+  A session whose master was killed is replaced by the next one from that machine.
+
+Two guards worth knowing about, because both were bugs first:
+
+- The stream is registered *synchronously* as the shell message is handled. The
+  bytes of the ssh handshake are already on their way, and a message that arrives
+  before the stream exists is dropped — which showed up as a shell that worked
+  only sometimes.
+- Arguments are quoted for the far side's shell before being sent, because ssh
+  carries one command string. Joining arguments with spaces turns `sh -c 'seq 1
+  200000'` into four arguments, and the test in `internal/master/quote_test.go`
+  exists to keep that honest.
+
+`ssheep run` is unchanged: no pty, no stdin, output prefixed per machine, for
+doing one thing to many machines at once.
+
 ## Deliberate omissions
 
 - **Direct connections.** Today every byte goes through a connector. IPv6,
   UPnP and hole punching are all upgrades that sit *on top of* the relay rather
   than replacing it — the relay stays as the fallback that always works.
-- **Interactive shells.** `run` executes and streams output; there is no pty and
-  no stdin yet.
-- **File transfer.** `copy` is not implemented.
+- **File transfer and port forwarding.** There is no `copy`, no `-L`, no
+  `-R`, and no `ProxyCommand`. The session is a byte channel, so all three sit
+  on top of it rather than needing a new design — but none is built.
+- **The shell is Linux and macOS only.** It needs a pty, and that is the one
+  place the code is platform-specific. A Windows sheep can be commanded, not
+  logged into.
 - **A directory of volunteer relays.** One default relay is built in, and a
   connector registers itself with its flock. What does not exist yet is a pool of
   volunteered relays, and the client-side selection that would spread flocks

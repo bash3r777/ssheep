@@ -35,6 +35,14 @@ const (
 	KindOut  = "out"  // sheep -> master: standard output
 	KindErr  = "err"  // sheep -> master: standard error
 	KindExit = "exit" // sheep -> master: finished
+
+	// The interactive shell. It is the same session, carrying a real ssh
+	// conversation instead of a command and its output: ssh already knows how to
+	// do terminals, window sizes, signals and exit statuses, so there is no
+	// reason to invent any of that here.
+	KindShell = "shell" // master -> sheep: start an ssh server on this session
+	KindBytes = "bytes" // both ways: raw bytes of that conversation
+	KindEof   = "eof"   // master -> sheep: that stream is finished
 )
 
 // Wire is the tunnel's on-the-wire message.

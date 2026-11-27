@@ -49,6 +49,7 @@
 
       <ul class="feat">
         <li><span class="ic">🐑</span>Every machine you own, one flock</li>
+        <li><span class="ic">🐚</span>A real shell on any machine, nothing to install</li>
         <li><span class="ic">🚀</span>Run a command on every sheep at once</li>
         <li><span class="ic">👀</span>See every machine, live, in one screen</li>
         <li><span class="ic">🔓</span>No open ports, no port forwarding</li>
@@ -85,7 +86,10 @@
 <span class="p">$</span> ssheep run "myflock" -- uptime
 sheep-1|  14:22:01 up 3 days,  2:14,  load average: 0.08
 sheep-2|  14:22:01 up 12 days, 4:02,  load average: 0.31
-<span class="c">❯</span> <span class="cur"></span></pre></div>
+
+<span class="c"># Or sit down at one of them:</span>
+<span class="p">$</span> ssheep shell "myflock" --name sheep-1
+pi@sheep-1:~# <span class="cur"></span></pre></div>
 
         <div class="mapbox">
           <svg class="dg" viewBox="0 0 620 250" role="img"

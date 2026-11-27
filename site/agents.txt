@@ -63,9 +63,29 @@ MULTIPLE FLOCKS
   flock is entirely separate — its own key, roster, connectors and machine names —
   so being in a second flock cannot leak anything into the first.
 
+SHELL
+  ssheep shell <flock> --name NAME            an interactive terminal on one machine
+  ssheep shell <flock> --name NAME -- CMD...  one command, with a terminal
+  A REAL ssh session — pty, window size, ^C, colours, exit status — but the ssh
+  server runs INSIDE the encrypted tunnel, not on a port:
+  - no sshd installed on the machine, no authorized_keys, no known_hosts, no
+    first-use trust, nothing listening. The machine is whoever the signed roster
+    says it is, and the flock key is what proves it.
+  - ssh's own authentication is deliberately off, because the tunnel already
+    answered who is asking: only a roster-listed master can complete the
+    handshake at all. The ssh host key is invented per connection and thrown away,
+    and the client does not check it — the tunnel is the trust anchor, not a host
+    key, and a second, weaker check would be worse than none.
+  - the shell runs as the user the agent runs as. Run the agent as yourself (a
+    systemd user unit is the tidy way) and a shell here is your own environment.
+  - no terminal asked for, none given: piping a command through gets the bytes
+    exactly as written, with no terminal line endings and no echo.
+  - exit status is passed back out the way ssh does.
+  Linux and macOS only, because it needs a pty. No file transfer, no port
+  forwarding, no agent forwarding, no subsystems: sessions are all it serves.
+
 MULTIPLE MASTERS
-  A flock can have more than one master, and one is minted by default. A master
-  ticket is the only one that carries the flock key, so the machine that takes it can
+  A master ticket is the only one that carries the flock key, so the machine that takes it can
   add and remove machines, mint tickets and accept a connector's offer — exactly as
   the first master does. `--masters 0` mints none.
   - A master has no service: it connects when you run a command. As it connects it
@@ -108,6 +128,8 @@ COMMANDS
   ssheep see [<flock>]                    the flocks, live (all of them by default)
   ssheep run <flock> -- CMD...            every sheep in one flock
   ssheep run <flock> --name NAME -- CMD... one machine
+  ssheep shell <flock> --name NAME        an interactive terminal on one machine,
+                                          with or without -- CMD (Linux, macOS)
   ssheep forget <flock> --name NAME       revoke a machine
   ssheep flock list                       the flocks this machine knows
 

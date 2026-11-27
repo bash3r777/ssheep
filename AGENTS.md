@@ -21,16 +21,24 @@ internal/invite/    single-use tickets (a key pair plus a signed roster), and
 internal/frame/     length-prefixed messages over a stream
 internal/proto/     the envelope spoken to a connector
 internal/netx/      pinned TLS: self-signed certs, fingerprint dialling
-internal/tunnel/    the end-to-end session: X25519 + Ed25519 + AES-GCM
+internal/tunnel/    the end-to-end session: X25519 + Ed25519 + AES-GCM, and
+                    conn.go, which runs a byte stream (ssh) inside it
 internal/connector/ the relay: auth, flock registry, routing, offers, join.go
-internal/sheep/     the agent: links, exec, roster following
-internal/master/    the operator side: list, run, publish, offers.go
+internal/sheep/     the agent: links, exec, roster following, and the shell it offers
+internal/sshd/      the interactive shell: a real ssh server, fed by the tunnel
+                    rather than by a port
+internal/master/    the operator side: list, run, shell, publish, offers.go
 site/               the website, served at ssheep.xyz from shared hosting
 deploy/             systemd units and how to run them
 ```
 
-Dependencies: **none beyond the Go standard library.** Keep it that way. The
-static binary with no dependencies is a feature, not an accident.
+Dependencies: **the standard library, plus three small modules the interactive
+shell needs** — `golang.org/x/crypto/ssh` (a real ssh client and server),
+`golang.org/x/term` (raw mode), and `github.com/creack/pty` (the pty on the far
+side). That exception was made deliberately, and the alternative was worse: the
+other way to get a shell is to require sshd and `authorized_keys` on every
+machine, which is the setup this tool exists to avoid. All the crypto the flock
+itself uses is still the standard library. Do not add a fourth.
 
 ## The commands people actually use
 
@@ -56,6 +64,12 @@ away otherwise cannot verify a machine added since.
 
 Commands that act on a flock take it as the first positional (`ssheep see work`,
 `ssheep run work -- uptime`), and leaving it out means "all of them".
+
+`ssheep shell <flock> --name <machine>` opens a terminal on one machine. It is ssh
+inside the tunnel: sshd runs in-process on the sheep, fed by the tunnel frames,
+with no client auth and an ephemeral host key, because the flock already answered
+who is asking. See `internal/sshd` and the "The shell" section of
+`docs/ARCHITECTURE.md` — and read the three traps below before touching it.
 
 The older step-by-step commands (`init`, `invite`, `connector add`) still exist
 and still work. Keep them working: they are how somebody takes control when the
@@ -95,6 +109,29 @@ compacts the bytes again before checking. If you change how rosters are written,
 step once ran `make build` without `install -m 0755 bin/ssheep /usr/local/bin/`,
 so the machines kept running the old binary and a fix appeared not to work.
 After deploying, verify the hash, do not assume.
+
+## Three traps in the shell
+
+All three were bugs first, and all three looked like flakiness rather than
+breakage — which is what made them expensive to find.
+
+**Register the stream before returning to the read loop.** The sheep starts the
+ssh server when the shell message arrives, and the client's ssh handshake bytes
+are already in flight behind it. Registering the stream inside a goroutine means
+those bytes can arrive before the stream exists, and be dropped — a shell that
+works only sometimes. Registration happens synchronously in `handle`; only
+`sshd.Serve` runs in the goroutine.
+
+**Quote the arguments.** ssh carries one command string, so `argv` is quoted for
+the far side's shell by `quoteForShell`. Joining with spaces silently turns
+`sh -c 'seq 1 200000'` into four arguments and a cryptic error.
+`internal/master/quote_test.go` pushes real arguments through a real /bin/sh.
+
+**Say goodbye.** Nothing in the tunnel signals "this stream is finished" unless
+you do it: the master sends `tunnel.KindEof`, the sheep closes the stream, which
+ends the ssh connection, which hangs up the shell. Without it the sheep keeps the
+session — and the shell process — alive until the connector connection happens to
+drop, and the next shell from that machine is refused.
 
 ## Test environment
 

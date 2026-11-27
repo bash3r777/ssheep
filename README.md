@@ -67,6 +67,27 @@ are minted of each kind, the connector's port. See `ssheep master -h`.
 Add a second connector early. Machines try them in roster order and survive
 losing any of them; one connector is a single point of failure.
 
+## A shell on any machine
+
+```sh
+ssheep shell "myflock" --name pi            # interactive
+ssheep shell "myflock" --name pi -- htop    # one command, with a terminal
+```
+
+It is a real terminal: the window size, `^C`, `^D`, colours and exit statuses all
+work, and the exit status is passed back out the way ssh does.
+
+What makes it unusual is what it does *not* need. There is no sshd to install on
+the machine, no `authorized_keys` to copy, no `known_hosts` and no first-use
+trust, and nothing listening on a port — the ssh server runs *inside* the
+encrypted session the flock already established, and a connector carries it
+without being able to read it. The machine you are talking to is the machine the
+signed roster says it is, and the flock key is what proves it.
+
+The shell runs as the user the agent runs on that machine, so run the agent as
+yourself — a systemd *user* unit is the tidy way — and a shell here is your own
+environment, dotfiles and all.
+
 ## More than one master
 
 A master ticket carries the flock key, so the machine that takes it can add and
@@ -108,12 +129,22 @@ another.
 
 Early, but working end to end: identity, invites, connectors, failover across
 more than one of them, many flocks on one relay, one machine in many flocks, the
-relay path, `see`, `run`, and revocation across networks.
+relay path, `see`, `run`, `shell`, and revocation across networks.
 
 Known gaps: online/offline is reported per connector, so with several connectors a
-machine connected to a different one can show as offline. There is no interactive
-shell and no file transfer. Direct connections (IPv6, UPnP, hole punching) would
-sit on top of the relay rather than replace it.
+machine connected to a different one can show as offline. There is no file
+transfer and no port forwarding, and a session is only ever per flock — `run` and
+`shell` are as much as it does today. Direct connections (IPv6, UPnP, hole
+punching) would sit on top of the relay rather than replace it.
+
+## How it is built
+
+Go, and — until the shell — the standard library only. The interactive shell
+needs three small, well-known modules and no more: `x/crypto/ssh` for a real ssh
+client and server, `x/term` for putting your terminal into raw mode, and
+`creack/pty` for the pty on the far side. Everything else, including all the
+crypto the flock itself uses, is the standard library. It is still one static
+binary with nothing to install on the machine you are talking to.
 
 ## Licence
 
