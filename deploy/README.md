@@ -93,6 +93,37 @@ enrolled. It never overwrites an existing identity.
 A machine can be a sheep in more than one flock: install another ticket and the
 one process serves all of them.
 
+## A shell on a sheep
+
+Any machine in the flock can be logged into:
+
+```sh
+ssheep shell "<flock>" --name pi            # interactive
+ssheep shell "<flock>" --name pi -- htop    # one command, with a terminal
+```
+
+Nothing has to be installed or opened on the sheep for this: there is no sshd, no
+`authorized_keys`, and no port. It is ssh running inside the encrypted session the
+flock already has.
+
+**The shell runs as the user the agent runs as**, so this is worth one thought.
+The system unit above runs it as a locked-down `ssheep` system user, which is the
+right answer for a machine you only ever command — a shell there is a bare
+environment with no dotfiles and no history. If you want a shell that feels like
+*yours*, run the agent as yourself with a **user** unit instead:
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp deploy/ssheep-sheep.service ~/.config/systemd/user/
+# drop User=, Group= and StateDirectory= and point SSEHEEP_DIR at your home
+systemctl --user daemon-reload
+systemctl --user enable --now ssheep-sheep
+loginctl enable-linger "$USER"     # keep it running when you are not logged in
+```
+
+Then a shell from the master is your own environment, and nothing runs as root
+anywhere.
+
 ## Verifying
 
 ```sh
