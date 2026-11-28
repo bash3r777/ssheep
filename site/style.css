@@ -160,9 +160,13 @@ em { color: var(--fg); font-style: normal; }
 @media (max-width: 620px) { .feat li { white-space: normal; overflow: visible; } }
 .feat .ic { display: inline-block; min-width: 1.5em; margin-right: .75em; }
 
-/* ── the terminal, from the reference ──────────────────────────────────── */
-.term { max-width: none; margin: 0; padding: 0; }
-.term .win { border: 1px solid var(--line); background: var(--card); box-shadow: 0 40px 90px -54px #000; }
+/* ── the terminal, and the picture under it ───────────────────────────── */
+/* The column is as tall as the one beside it, and the picture takes up the
+   slack: the terminal keeps its size and the map box grows. That way the two
+   columns line up whatever the feature list is doing this week. */
+.v3side { display: flex; }
+.term { display: flex; flex-direction: column; width: 100%; max-width: none; margin: 0; padding: 0; }
+.term .win { display: flex; flex-direction: column; height: 100%; border: 1px solid var(--line); background: var(--card); box-shadow: 0 40px 90px -54px #000; }
 .term .tbar { display: flex; gap: 8px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line); background: #0a0f15; }
 .term .dt { width: 10px; height: 10px; border-radius: 50%; }
 .term .dt.r { background: #ff5f57; } .term .dt.y { background: #febc2e; } .term .dt.g { background: #28c840; }
@@ -209,7 +213,7 @@ em { color: var(--fg); font-style: normal; }
 .dg .link { fill: none; stroke-width: 1.4; stroke-dasharray: 3 5; opacity: .9; }
 
 /* ── the map: the shape of a flock, under the terminal ─────────────────── */
-.mapbox { border-top: 1px solid var(--line); background: radial-gradient(120% 120% at 50% 0%, #0c131c, #080c11); padding: 16px 16px 12px; }
+.mapbox { border-top: 1px solid var(--line); background: radial-gradient(120% 120% at 50% 0%, #0c131c, #080c11); padding: 16px 16px 12px; flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; }
 .mapbox svg { display: block; width: 100%; height: auto; }
 
 /* ── the about page: plain pre, tables, boxes ──────────────────────────── */

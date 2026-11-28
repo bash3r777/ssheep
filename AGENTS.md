@@ -133,6 +133,11 @@ ends the ssh connection, which hangs up the shell. Without it the sheep keeps th
 session — and the shell process — alive until the connector connection happens to
 drop, and the next shell from that machine is refused.
 
+**Two edits to one file at once lose one.** Editing the same file in two parallel
+tool calls is a lost update: both read, both write, the later one wins, and the
+earlier change is silently gone. One edit at a time, or one edit that does both
+things.
+
 ## Test environment
 
 A relay is live at `138.201.131.115:7000` (a Proxmox VM, `10.20.20.30`, on the
