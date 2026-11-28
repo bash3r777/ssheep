@@ -21,6 +21,7 @@ import (
 	"ssheep.xyz/internal/master"
 	"ssheep.xyz/internal/netx"
 	"ssheep.xyz/internal/peer"
+	"ssheep.xyz/internal/proto"
 	"ssheep.xyz/internal/sheep"
 )
 
@@ -35,9 +36,11 @@ const (
 	defaultRelay = "relay.ssheep.xyz:7000"
 	// defaultPort is what a connector listens on.
 	defaultPort = 7000
-	// defaultSheep and defaultConnector are how many tickets `master` mints.
+	// defaultSheep is how many tickets `master` mints. There is no connector
+	// default any more: every machine relays for the flock if it can, so nobody
+	// has to decide which one has a public address.
 	defaultSheep     = 3
-	defaultConnector = 1
+	defaultConnector = 0
 	// defaultMasters is how many spare master tickets it mints. One, because a
 	// flock whose key exists in exactly one place is a flock that cannot be
 	// changed the day that place dies — and a master ticket is only as safe as
@@ -53,7 +56,6 @@ const usage = `ssheep — one binary, one file, one key.
   master [flock] <name>      create a flock, print what to run on the others
   join "<ticket>"            take a ticket somebody gave you, and be what it says
   sheep "<ticket>"           join a flock as a sheep, then serve
-  connector "<ticket>"       join a flock as a connector, then serve
 
   see [<flock>]              the flocks, live
   run <flock> -- <cmd>       run a command on every sheep in a flock
@@ -62,13 +64,16 @@ const usage = `ssheep — one binary, one file, one key.
   flock list                 the flocks this machine knows
 
   invite <flock> --name N    mint one ticket by hand
-  connector add|remove|list  manage a flock's connectors by hand
-  pin --addr HOST:PORT       print a connector's fingerprint
+  connector "<ticket>"       join a flock as a dedicated relay, then serve
+  connector add|remove|list  manage a flock's relays by hand
+  pin --addr HOST:PORT       print a relay's fingerprint
 
   version                    print the version
 
-A machine can be in as many flocks as it likes, and holds a separate key in
-each one. Run "ssheep <command> -h" for the flags of any command.`
+Every machine relays for its flock on its own when it can be reached, so there is
+nothing to work out and no machine to pick: paste the same line anywhere. A machine
+can be in as many flocks as it likes, and holds a separate key in each one. Run
+"ssheep <command> -h" for the flags of any command.`
 
 func main() {
 	log.SetFlags(0)
@@ -204,6 +209,72 @@ func connectorTargets() ([]connector.Enrolled, error) {
 	return out, nil
 }
 
+// maxRelays is how many relays a flock keeps. Enough to survive losing one or
+// two; more would only mean more links on every machine for no extra reach.
+const maxRelays = 5
+
+// relayableFlocks is every flock this machine is allowed to relay for.
+func relayableFlocks() []*local.Flock {
+	all, err := local.All()
+	if err != nil {
+		return nil
+	}
+	var out []*local.Flock
+	for _, f := range all {
+		if f.MayRelay {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// startRelay lets this machine help if it can, and returns its relay's
+// fingerprint when it does.
+//
+// It is the whole point of the automatic design: every machine tries, and the
+// ones that turn out to be reachable end up in the roster. There is nothing to
+// decide and nothing to configure — a machine behind a NAT that nobody can reach
+// offers itself, fails the master's check, and stays a perfectly good sheep.
+//
+// Failing here is never fatal, for the same reason.
+//
+// The offer itself is sent by the sheep, on the connection it already holds: see
+// sheep.offerOn for why it is not a connection of its own.
+func startRelay(flocks []*local.Flock, port int) (string, bool) {
+	var enrolled []connector.Enrolled
+	for _, f := range flocks {
+		if f.MayRelay {
+			enrolled = append(enrolled, connector.Enrolled{
+				Name: f.Name, RosterPath: f.RosterPath, NodePath: f.NodePath,
+			})
+		}
+	}
+	if len(enrolled) == 0 {
+		return "", false
+	}
+	srv, err := connector.Start(enrolled, port, false)
+	if err != nil {
+		log.Printf("this machine is not relaying: %v", err)
+		return "", false
+	}
+	log.Printf("relaying for %d flock(s) on :%d", len(enrolled), port)
+	return srv.Pin(), true
+}
+
+// withRelay tells the sheep about the relay this machine is running, so each of
+// them can offer it on the connection it already holds. addr overrides where the
+// machine says it can be reached, for a router forwarding a different port.
+func withRelay(targets []sheep.Target, pin string, port int, addr string) {
+	if pin == "" {
+		return
+	}
+	for i := range targets {
+		targets[i].RelayPin = pin
+		targets[i].RelayPort = port
+		targets[i].RelayAddr = addr
+	}
+}
+
 // ---------------------------------------------------------------------------
 // join
 // ---------------------------------------------------------------------------
@@ -219,8 +290,8 @@ func cmdJoin(args []string) error {
 	fs := newFlagSet("join")
 	ticket := fs.String("ticket", "", "the ticket, if it is not the argument")
 	conn := fs.String("connector", "", "use this connector instead of the flock's first")
-	addr := fs.String("addr", "", "connector: the address other machines reach this one at")
-	port := fs.Int("port", defaultPort, "connector: port to listen on")
+	addr := fs.String("addr", "", "relay: the address other machines reach this one at (default: worked out)")
+	port := fs.Int("port", defaultPort, "relay: port to listen on")
 	public := fs.Bool("public", false, "connector: also serve flocks that are not yours")
 	installOnly := fs.Bool("install-only", false, "take the ticket and exit, do not serve")
 	pos, err := parseFlags(fs, args)
@@ -274,6 +345,8 @@ func cmdJoin(args []string) error {
 		if len(targets) == 0 {
 			return errors.New("join: the ticket was taken, but this machine is not a sheep in any flock")
 		}
+		pin, _ := startRelay(relayableFlocks(), *port)
+		withRelay(targets, pin, *port, *addr)
 		return sheep.RunMany(targets, *conn)
 	case flock.RoleConnector:
 		fmt.Printf("📡  this machine is now a connector for flock %q\n", f.Name)
@@ -298,6 +371,8 @@ func cmdSheep(args []string) error {
 	fs := newFlagSet("sheep")
 	file := fs.String("ticket-file", "", "read the ticket from a file instead of the command line")
 	conn := fs.String("connector", "", "use this connector instead of the flock's first")
+	port := fs.Int("port", defaultPort, "relay: port to listen on")
+	addr := fs.String("addr", "", "relay: the address other machines reach this one at (default: worked out)")
 	installOnly := fs.Bool("install-only", false, "unpack the ticket and exit, do not serve")
 	pos, err := parseFlags(fs, args)
 	if err != nil {
@@ -329,6 +404,8 @@ func cmdSheep(args []string) error {
 	if *installOnly {
 		return nil
 	}
+	pin, _ := startRelay(relayableFlocks(), *port)
+	withRelay(targets, pin, *port, *addr)
 	return sheep.RunMany(targets, *conn)
 }
 
@@ -691,15 +768,20 @@ func cmdSee(args []string) error {
 }
 
 func showFlock(f *local.Flock, connectorAddr string) error {
-	cl, err := master.Open(f.RosterPath, f.NodePath, connectorAddr)
-	if err != nil {
+	// Reload the roster: a relay may have been accepted since this machine last
+	// looked, and it is the relays the query goes to.
+	if sr, err := flock.LoadSignedRoster(f.RosterPath); err == nil {
+		if r, err := sr.Verify(); err == nil {
+			f.Roster = r
+		}
+	}
+
+	reply, answered, err := master.ListAll(f.RosterPath, f.NodePath, connectorAddr, 10*time.Second)
+	if err != nil && len(answered) == 0 {
 		return err
 	}
-	defer cl.Close()
-	reply, err := cl.List(10 * time.Second)
-	if err != nil {
-		return err
-	}
+	relays := relaysByMember(f.Roster)
+
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	online := 0
 	for _, m := range reply.Members {
@@ -708,23 +790,69 @@ func showFlock(f *local.Flock, connectorAddr string) error {
 		}
 	}
 	fmt.Printf("flock %q  %s  (%d of %d online)\n", f.Name, f.ID, online, len(reply.Members))
-	fmt.Fprintln(w, "  NAME\tROLE\tSTATUS\tID")
+	if len(relays) > 0 {
+		fmt.Fprintln(w, "  NAME\tROLE\tSTATUS\tRELAY\tID")
+	} else {
+		fmt.Fprintln(w, "  NAME\tROLE\tSTATUS\tID")
+	}
 	for _, m := range reply.Members {
 		status := "offline"
 		if m.Online {
 			status = "online"
 		}
+		if len(relays) > 0 {
+			relay := "—"
+			if addr, ok := relays[m.ID]; ok {
+				relay = addr
+			}
+			fmt.Fprintf(w, "  %s\t%s\t%s\t%s\t%s\n", m.Name, m.Role, status, relay, m.ID)
+			continue
+		}
 		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", m.Name, m.Role, status, m.ID)
 	}
 	_ = w.Flush()
-	if n := len(cl.Connectors()); n > 1 {
-		fmt.Printf("  via %s (of %d connectors)\n", cl.Connector(), n)
+	if n := len(f.Roster.Connectors); n > 1 {
+		fmt.Printf("  via %d of %d relays\n", len(answered), n)
 	}
-	if len(reply.Offers) > 0 {
-		fmt.Printf("  %d connector(s) waiting to register — run `ssheep master %q`\n", len(reply.Offers), f.Name)
+	if n := len(waitingMachines(reply.Offers, f.Roster)); n > 0 {
+		fmt.Printf("  %d machine(s) offered to relay but cannot be reached from here — they stay sheep\n", n)
+	}
+	if err != nil {
+		fmt.Printf("  (%v)\n", err)
 	}
 	fmt.Println()
 	return nil
+}
+
+// relaysByMember maps a member id to the address it relays at, so a machine that
+// is helping shows up as such rather than as a bare address in a list.
+func relaysByMember(r flock.Roster) map[string]string {
+	out := map[string]string{}
+	for _, c := range r.Connectors {
+		if c.By != "" {
+			out[c.By] = c.Addr
+		}
+	}
+	return out
+}
+
+// waitingMachines is the machines that have offered to relay but are not
+// relaying yet, counted once each: a machine offers several addresses at once,
+// so counting offers would count the same machine again and again.
+func waitingMachines(offers []proto.Offer, r flock.Roster) map[string]bool {
+	relaying := map[string]bool{}
+	for _, c := range r.Connectors {
+		if c.By != "" {
+			relaying[c.By] = true
+		}
+	}
+	out := map[string]bool{}
+	for _, o := range offers {
+		if !relaying[o.ID] {
+			out[o.ID] = true
+		}
+	}
+	return out
 }
 
 func cmdRun(args []string) error {

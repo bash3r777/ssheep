@@ -1,9 +1,20 @@
 # Deploying ssheep
 
-## The connector
+## Automatic relaying — usually nothing to do here
 
-One machine in the flock has to be reachable. That is the connector, and it is
-the only machine that needs a reachable address at all.
+Every machine you join starts relaying for the flock by itself if it can be
+reached, so you normally do not deploy a relay at all: you join sheep, and the
+reachable ones take over. A new flock also starts with the project's public relay
+in its roster, so the first machine can be behind anything. `ssheep see` shows
+which machines are relaying.
+
+What follows is for the times you want a machine to be *only* a relay — a box in a
+datacenter with a public address, say — or to donate one to strangers.
+
+## A dedicated relay
+
+A machine whose whole job is relaying is enrolled with a connector ticket. It is
+the one role that needs a reachable address.
 
 ```sh
 install -m 0755 ssheep /usr/local/bin/ssheep
@@ -11,7 +22,8 @@ install -m 0644 deploy/ssheep-connector.service /etc/systemd/system/
 systemctl daemon-reload
 ```
 
-Then hand it the ticket that `ssheep master` printed:
+Then hand it the ticket that `ssheep master` printed (with `--connector 1`, since
+none is printed by default):
 
 ```sh
 curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "<ticket>"
@@ -21,12 +33,12 @@ journalctl -u ssheep-connector | head
 
 That is all. The service runs `ssheep connector`, which for an enrolled machine
 means "serve a relay **and** tell the flock where it is". The state directory is
-`SSHEEP_DIR=/var/lib/ssheep`, set in the unit. The connector works out its own
+`SSHEEP_DIR=/var/lib/ssheep`, set in the unit. The relay works out its own
 address by asking the flock what it looks like from outside, offers itself, and
 the master accepts it on its next command. Nothing is copied by hand.
 
-A connector can be a connector for several flocks at once: install a ticket for
-each, and one relay on one port serves them all.
+A relay can serve several flocks at once: install a ticket for each, and one relay
+on one port serves them all.
 
 Behind a NAT with no port forwarding that guess is wrong. The master will say so
 and add nothing; then pass the truth:
@@ -35,11 +47,11 @@ and add nothing; then pass the truth:
 ssheep connector "<ticket>" --addr <the address people really reach you at>:7000
 ```
 
-**Run more than one.** Two connectors on different networks turn a bad afternoon
-into a non-event; every sheep holds a link to each of them, and a master falls
+**Run more than one.** Two relays on different networks turn a bad afternoon
+into a non-event; every machine holds a link to each of them, and a master falls
 through the list. A second ticket is `ssheep master "<flock>" --invite`.
 
-Because the connector is blind, it is the least valuable machine in the flock.
+Because a relay is blind, it is the least valuable machine in the flock.
 If it is compromised, the attacker learns who talks to whom and nothing else. If
 it is lost, nothing is lost with it: stand up another, and it registers itself
 the same way.
@@ -89,6 +101,11 @@ unit. `--install-only` takes the ticket and exits. Without it, `ssheep join`
 installs first if there is no identity yet, then serves — so the same line works
 in a provisioning script on a fresh machine and as a no-op on one that is already
 enrolled. It never overwrites an existing identity.
+
+The sheep also relays for its flocks when it can be reached — same binary, same
+service, nothing extra to configure. It listens on `--port` (7000 by default) and
+offers itself to the flock; a machine that cannot be reached from the master just
+stays a sheep. Pass `--addr` if a router forwards a different external port.
 
 A machine can be a sheep in more than one flock: install another ticket and the
 one process serves all of them.

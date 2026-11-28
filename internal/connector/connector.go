@@ -553,14 +553,20 @@ func (s *Server) sendList(st *flockState, from *session) error {
 	return peer.Send(from.conn, proto.Wrap(proto.TypeListReply, reply))
 }
 
-// setOffer keeps a machine's offer, replacing any earlier one from it.
+// setOffer keeps a machine's offer, replacing any earlier one for the same
+// address.
+//
+// One machine may offer several addresses -- a global IPv6 address, a forwarded
+// port, its address on the local network -- because only the master can tell
+// which of them the flock can actually reach. So all of them have to survive to
+// the master, which is why the key is the machine *and* the address.
 func (st *flockState) setOffer(o proto.Offer) {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.offers == nil {
 		st.offers = map[string]proto.Offer{}
 	}
-	st.offers[o.ID] = o
+	st.offers[o.ID+"|"+o.Addr] = o
 }
 
 // currentOffers returns the offers that have not gone stale.
@@ -568,9 +574,9 @@ func (st *flockState) currentOffers() []proto.Offer {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	var out []proto.Offer
-	for id, o := range st.offers {
+	for k, o := range st.offers {
 		if time.Since(o.At) > offerTTL {
-			delete(st.offers, id)
+			delete(st.offers, k)
 			continue
 		}
 		out = append(out, o)

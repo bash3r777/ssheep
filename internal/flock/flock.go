@@ -36,6 +36,16 @@ const (
 type Connector struct {
 	Addr string `json:"addr"` // host:port
 	Pin  string `json:"pin"`  // sha256 hex of the connector's TLS certificate
+
+	// By is the member that offered this relay, when a machine did. A relay the
+	// operator added by hand -- the project's own relay, or `connector add` --
+	// has none.
+	//
+	// It is what lets `see` say which machines are relaying instead of showing
+	// bare addresses, and it is what lets the master keep one relay per machine
+	// and drop a machine's relay when the machine moves without touching the
+	// relays an operator chose.
+	By string `json:"by,omitempty"`
 }
 
 // Member is one machine in the flock.
@@ -46,6 +56,22 @@ type Member struct {
 	SignKey []byte    `json:"sign_key"` // ed25519 public key
 	KexKey  []byte    `json:"kex_key"`  // x25519 public key
 	Added   time.Time `json:"added"`
+
+	// Relay says this machine may offer itself as a relay for the flock.
+	//
+	// Every machine gets it, and that is the point: the operator should not have
+	// to work out which of their machines has a public address. A machine that
+	// offers itself and cannot be reached simply fails the master's check and
+	// stays a sheep, which is why nobody has to guess.
+	Relay bool `json:"relay,omitempty"`
+}
+
+// MayRelay reports whether this machine is allowed to volunteer as a relay.
+//
+// A connector is a machine whose whole job is relaying, so it always may. For
+// everybody else it is the flag, which is set on every ticket.
+func (m *Member) MayRelay() bool {
+	return m.Role == RoleConnector || m.Relay
 }
 
 // Roster is the flock: public membership plus where to find the connectors.

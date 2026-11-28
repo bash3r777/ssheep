@@ -9,45 +9,39 @@ import (
 	"log"
 	"net"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"ssheep.xyz/internal/flock"
 	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/netx"
 	"ssheep.xyz/internal/peer"
 	"ssheep.xyz/internal/proto"
 )
 
-// Enrolled is one flock this machine is a connector for.
+// Enrolled is one flock this machine may relay for.
 type Enrolled struct {
 	Name       string
 	RosterPath string
 	NodePath   string
 }
 
-// Join runs this machine as a connector for every flock it is enrolled in.
+// Start brings up a relay for the flocks this machine is in, and returns without
+// blocking.
 //
-// One relay, one port, several flocks. The relay already keeps flocks apart, so
-// being reachable for three of them costs what being reachable for one costs.
-// Each flock is announced separately, because each has its own connectors and
-// its own roster.
-//
-// The address is worked out the honest way: this machine asks a flock what it
-// looks like from outside, and offers itself at that address on its listening
-// port. Behind a NAT with no port forwarding that guess is wrong, the master
-// will say so, and then --addr is there to be told the truth.
-func Join(flocks []Enrolled, addr string, port int, public bool) error {
+// It is what a sheep calls when it wants to help. One relay, one port, several
+// flocks: the relay already keeps flocks apart, so being reachable for three of
+// them costs what being reachable for one costs. Whether anybody can actually
+// reach it is not this machine's problem to solve — see Announce.
+func Start(flocks []Enrolled, port int, public bool) (*Server, error) {
 	if len(flocks) == 0 {
-		return errors.New("connector: this machine is not a connector for any flock")
+		return nil, errors.New("relay: this machine is not in any flock")
 	}
 	paths := make([]string, 0, len(flocks))
-	names := make([]string, 0, len(flocks))
 	for _, f := range flocks {
 		if err := checkEnrolled(f); err != nil {
-			return err
+			return nil, err
 		}
 		paths = append(paths, f.RosterPath)
-		names = append(names, f.Name)
 	}
 
 	srv, err := New(Config{
@@ -62,34 +56,57 @@ func Join(flocks []Enrolled, addr string, port int, public bool) error {
 		MaxMembers: 1000,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	listen := fmt.Sprintf(":%d", port)
-	ln, err := srv.Listen(listen)
+	ln, err := srv.Listen(fmt.Sprintf(":%d", port))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	go func() {
 		if err := srv.Serve(ln); err != nil {
-			log.Printf("connector: %v", err)
+			log.Printf("relay: %v", err)
 		}
 	}()
+	return srv, nil
+}
 
-	fmt.Printf("\n📡  relay running on %s\n", listen)
-	fmt.Printf("    fingerprint %s\n", srv.Pin())
-	for _, n := range names {
-		fmt.Printf("    serving flock %q\n", n)
-	}
-
+// Announce keeps offering this machine as a relay, for as long as it is up.
+//
+// It offers every address the machine might be reachable at and lets the master
+// decide, which is the whole trick: an address that does not answer is simply not
+// added, so the machine never has to work out whether it is reachable. addrs
+// overrides that guess when the operator knows better.
+func Announce(flocks []Enrolled, pin string, addrs []string, port int) {
 	for _, f := range flocks {
-		go announceForever(f, srv.Pin(), addr, port)
+		go announceForever(f, pin, addrs, port)
 	}
+}
+
+// Join runs this machine as a dedicated relay, and blocks.
+//
+// This is the `ssheep connector` path: a machine whose whole job is relaying,
+// usually because it is the one with a public address.
+func Join(flocks []Enrolled, addr string, port int, public bool) error {
+	srv, err := Start(flocks, port, public)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\n📡  relay running on :%d\n", port)
+	fmt.Printf("    fingerprint %s\n", srv.Pin())
+	for _, f := range flocks {
+		fmt.Printf("    serving flock %q\n", f.Name)
+	}
+	var addrs []string
+	if addr != "" {
+		addrs = []string{addr}
+	}
+	Announce(flocks, srv.Pin(), addrs, port)
 	select {}
 }
 
-// checkEnrolled makes sure the machine really is a connector for this flock,
-// before it starts advertising itself as one.
+// checkEnrolled makes sure the machine really is in this flock, and is allowed to
+// relay for it, before it starts advertising itself as one.
 func checkEnrolled(f Enrolled) error {
 	sr, err := flock.LoadSignedRoster(f.RosterPath)
 	if err != nil {
@@ -105,21 +122,21 @@ func checkEnrolled(f Enrolled) error {
 	}
 	m := roster.Find(flock.NodeID(key.SignPub()))
 	if m == nil {
-		return fmt.Errorf("connector: this machine is not in flock %q", f.Name)
+		return fmt.Errorf("relay: this machine is not in flock %q", f.Name)
 	}
-	if m.Role != flock.RoleConnector {
-		return fmt.Errorf("connector: this machine is a %s in flock %q, not a connector\n  mint a connector ticket with: ssheep master %q", m.Role, f.Name, f.Name)
+	if !m.MayRelay() {
+		return fmt.Errorf("relay: this machine may not relay for flock %q", f.Name)
 	}
 	return nil
 }
 
 // announceForever keeps one flock's registration fresh for as long as this relay
 // is up.
-func announceForever(f Enrolled, pin, addrOverride string, port int) {
+func announceForever(f Enrolled, pin string, addrs []string, port int) {
 	delay := 5 * time.Second
 	for {
-		if err := announce(f, pin, addrOverride, port); err != nil {
-			log.Printf("connector: flock %s: %v", f.Name, err)
+		if err := announce(f, pin, addrs, port); err != nil {
+			log.Printf("relay: flock %s: %v", f.Name, err)
 			if delay < 2*time.Minute {
 				delay *= 2
 			}
@@ -130,13 +147,13 @@ func announceForever(f Enrolled, pin, addrOverride string, port int) {
 	}
 }
 
-// announce holds one connection open to a connector of this flock, offering this
-// relay and keeping the offer fresh.
+// announce holds one connection open to a relay of this flock, offering this
+// machine and keeping the offer fresh.
 //
-// It stays connected rather than knocking once: that way the flock sees the
-// connector as online while its relay is up, and roster changes reach it without
-// waiting for the next announcement.
-func announce(f Enrolled, pin, addrOverride string, port int) error {
+// It stays connected rather than knocking once: that way the flock sees the relay
+// as online while it is up, and roster changes reach it without waiting for the
+// next announcement.
+func announce(f Enrolled, pin string, addrs []string, port int) error {
 	sr, err := flock.LoadSignedRoster(f.RosterPath)
 	if err != nil {
 		return err
@@ -156,42 +173,39 @@ func announce(f Enrolled, pin, addrOverride string, port int) error {
 	for _, c := range roster.Connectors {
 		conn, ready, err := peer.DialReady(c.Addr, c.Pin, who, 10*time.Second)
 		if err != nil {
-			lastErr = fmt.Errorf("connector %s: %w", c.Addr, err)
+			lastErr = fmt.Errorf("relay %s: %w", c.Addr, err)
 			continue
 		}
 
-		myAddr := addrOverride
-		if myAddr == "" {
-			if ready.YouAre == "" {
-				conn.Close()
-				lastErr = errors.New("the connector did not say what address it sees us at; pass --addr")
-				continue
-			}
-			host, _, err := net.SplitHostPort(ready.YouAre)
-			if err != nil {
-				conn.Close()
-				lastErr = fmt.Errorf("could not work out this machine's address from %q: %w", ready.YouAre, err)
-				continue
-			}
-			myAddr = net.JoinHostPort(host, strconv.Itoa(port))
+		mine := candidateAddrs(addrs, &ready, port)
+		if len(mine) == 0 {
+			conn.Close()
+			lastErr = errors.New("no address to offer; pass --addr")
+			continue
 		}
-		if c.Addr == myAddr {
+		if contains(mine, c.Addr) {
 			// That is us. Nothing to announce to ourselves.
 			conn.Close()
 			continue
 		}
 
-		if err := sendOffer(conn, key, roster, id, myAddr, pin); err != nil {
+		offered := 0
+		for _, myAddr := range mine {
+			if err := sendOffer(conn, key, roster, id, myAddr, pin); err != nil {
+				lastErr = err
+				break
+			}
+			if _, err := peer.Read(conn); err != nil { // the acknowledgement
+				lastErr = err
+				break
+			}
+			offered++
+			log.Printf("relay: flock %s: %s knows this machine is at %s", f.Name, c.Addr, myAddr)
+		}
+		if offered == 0 {
 			conn.Close()
-			lastErr = err
 			continue
 		}
-		if _, err := peer.Read(conn); err != nil { // the acknowledgement
-			conn.Close()
-			lastErr = err
-			continue
-		}
-		log.Printf("connector: flock %s: %s knows this relay is at %s", f.Name, c.Addr, myAddr)
 
 		next := time.Now().Add(5 * time.Minute)
 		for {
@@ -201,13 +215,15 @@ func announce(f Enrolled, pin, addrOverride string, port int) error {
 				var ne net.Error
 				if errors.As(err, &ne) && ne.Timeout() {
 					if time.Now().After(next) {
-						if err := sendOffer(conn, key, roster, id, myAddr, pin); err != nil {
-							conn.Close()
-							return err
-						}
-						if _, err := peer.Read(conn); err != nil {
-							conn.Close()
-							return err
+						for _, myAddr := range mine {
+							if err := sendOffer(conn, key, roster, id, myAddr, pin); err != nil {
+								conn.Close()
+								return err
+							}
+							if _, err := peer.Read(conn); err != nil {
+								conn.Close()
+								return err
+							}
 						}
 						next = time.Now().Add(5 * time.Minute)
 					}
@@ -222,14 +238,36 @@ func announce(f Enrolled, pin, addrOverride string, port int) error {
 			case proto.TypeError:
 				var e proto.ErrMsg
 				_ = env.Decode(&e)
-				log.Printf("connector: flock %s: %s: %s", f.Name, c.Addr, e.Message)
+				log.Printf("relay: flock %s: %s: %s", f.Name, c.Addr, e.Message)
 			}
 		}
 	}
 	if lastErr == nil {
-		lastErr = errors.New("no other connector to announce to yet")
+		lastErr = errors.New("no other relay to announce to yet")
 	}
 	return lastErr
+}
+
+// candidateAddrs is every address this machine might be reachable at, or the
+// operator's override when they know better. See netx.CandidateAddrs.
+func candidateAddrs(override []string, ready *proto.Ready, port int) []string {
+	if len(override) > 0 {
+		return override
+	}
+	youAre := ""
+	if ready != nil {
+		youAre = ready.YouAre
+	}
+	return netx.CandidateAddrs(youAre, port)
+}
+
+func contains(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
 
 func sendOffer(conn *frame.Conn, key *flock.KeyFile, roster flock.Roster, id, addr, pin string) error {
@@ -252,15 +290,15 @@ func adoptRoster(env *proto.Envelope, rosterPath string, current flock.Roster) {
 	}
 	r, err := sr.Verify()
 	if err != nil {
-		log.Printf("connector: ignoring a roster that does not verify: %v", err)
+		log.Printf("relay: ignoring a roster that does not verify: %v", err)
 		return
 	}
 	if !bytes.Equal(r.FlockKey, current.FlockKey) || r.Version <= current.Version {
 		return
 	}
 	if err := sr.Save(rosterPath); err != nil {
-		log.Printf("connector: could not save the roster: %v", err)
+		log.Printf("relay: could not save the roster: %v", err)
 		return
 	}
-	log.Printf("connector: roster is now at version %d", r.Version)
+	log.Printf("relay: roster is now at version %d", r.Version)
 }

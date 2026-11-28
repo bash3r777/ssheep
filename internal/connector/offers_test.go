@@ -135,6 +135,56 @@ func TestARelayRefusesAnOfferInSomeoneElsesName(t *testing.T) {
 	}
 }
 
+// One machine may offer several addresses -- a global IPv6 address, a forwarded
+// port, its address on the local network -- because only the master can tell
+// which of them the flock can actually reach. The relay has to keep them all,
+// not just the last, or a machine behind a NAT would offer its private address
+// and nothing else.
+func TestARelayKeepsEveryAddressAMachineOffers(t *testing.T) {
+	s, addr := start(t, Config{Public: true})
+	authority, member := key(t), key(t)
+	sr := signedAs(t, authority, member, "alpha", flock.RoleConnector)
+	r, err := sr.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	who := peer.Identity{Flock: r.ID(), NodeID: flock.NodeID(member.SignPub()), Key: member.SignKey(), Roster: sr}
+	conn, _, err := peer.DialReady(addr, s.Pin(), who, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	const pin = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	for _, a := range []string{"[2001:db8::1]:7000", "203.0.113.9:7000", "192.168.1.5:7000"} {
+		o := proto.Offer{
+			ID: who.NodeID, Addr: a, Pin: pin, At: time.Now().UTC(),
+			Sig: ed25519.Sign(member.SignKey(), proto.OfferMessage(r.ID(), who.NodeID, a, pin)),
+		}
+		if err := peer.Send(conn, proto.Wrap(proto.TypeOffer, o)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := peer.Read(conn); err != nil { // the acknowledgement
+			t.Fatal(err)
+		}
+	}
+
+	if err := peer.Send(conn, proto.Wrap(proto.TypeList, nil)); err != nil {
+		t.Fatal(err)
+	}
+	env, err := peer.Read(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reply proto.ListReply
+	if err := env.Decode(&reply); err != nil {
+		t.Fatal(err)
+	}
+	if len(reply.Offers) != 3 {
+		t.Fatalf("the relay is serving %d offers, want 3 -- one per address", len(reply.Offers))
+	}
+}
+
 // An offer has to look like an address and a fingerprint, or the master will
 // waste a dial on it.
 func TestARelayRefusesAMalformedOffer(t *testing.T) {

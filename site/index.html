@@ -49,11 +49,11 @@
         <li><span class="ic">🚀</span>Run a command on every sheep at once</li>
         <li><span class="ic">🔓</span>No open ports, no port forwarding</li>
         <li><span class="ic">🔒</span>Encrypted end to end</li>
-        <li><span class="ic">📡</span>Turn any machine into the relay</li>
+        <li><span class="ic">📡</span>Reachable machines relay on their own</li>
         <li><span class="ic">🙅</span>No accounts, no signup, nothing phones home</li>
         <li><span class="ic">🧪</span>Small enough to read, not just to trust</li>
         <li><span class="ic">🧰</span>One binary, no moving parts</li>
-        <li class="wide"><span class="ic">🧩</span>Any machine can be a sheep — or a connector, or a master — in as many flocks as you like</li>
+        <li class="wide"><span class="ic">🧩</span>Any machine can be a sheep — or a master, or the relay — in as many flocks as you like</li>
       </ul>
     </div>
 
@@ -63,16 +63,14 @@
         <div class="termbody"><pre class="dash"><span class="c"># Create the Flock:</span>
 <span class="p">$</span> ssheep master flock "myflock"
 <span class="g">👑</span>  You are Master — flock "myflock" created
-    connector  relay.ssheep.xyz:7000
+    relay      relay.ssheep.xyz:7000
 
-<span class="g">🐑</span> run this on each machine you want to be a Sheep <span class="g">🐑</span>:
+<span class="g">🐑</span> run this on every machine you want in the flock:
   curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "H4sIAAAA…"
-
-<span class="g">📡</span> run this on each machine you want to be a Connector <span class="g">📡</span>:
   curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "JSDFndSD…"
 
-<span class="g">👑</span> run this on each machine you want to be a Master <span class="g">👑</span>:
-  curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "LLIfeDDd…"
+<span class="c"># machines that can be reached relay on their own:</span>
+  sheep-1  relaying at 203.0.113.9:7000
 
 <span class="c"># Command the flock:</span>
 <span class="p">$</span> ssheep run "myflock" -- uptime
@@ -85,7 +83,7 @@ shell@sheep-1:~# <span class="cur"></span></pre></div>
 
         <div class="mapbox">
           <svg class="dg" viewBox="0 0 620 240" role="img"
-               aria-label="One master above two flocks. Each flock has one connector and three sheep, and every sheep is joined to the connector.">
+               aria-label="One master above two flocks. In each flock one machine relays (a sheep with a dish) and three are sheep, and every machine is joined to the relay.">
 
             <defs>
               <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
@@ -110,11 +108,11 @@ shell@sheep-1:~# <span class="cur"></span></pre></div>
             <rect class="flockbox" x="320" y="66" width="290" height="158" rx="9"/>
             <text class="fname" x="332" y="82">flock 2</text>
 
-            <!-- a connector, and the machines it reaches -->
+            <!-- the machine in each flock that relays: a sheep with a dish -->
             <rect class="box" x="115" y="98" width="80" height="32" rx="7"/>
-            <text class="em" x="155" y="114" text-anchor="middle" dominant-baseline="middle">📡</text>
+            <text class="em" x="155" y="114" text-anchor="middle" dominant-baseline="middle">🐑📡</text>
             <rect class="box" x="425" y="98" width="80" height="32" rx="7"/>
-            <text class="em" x="465" y="114" text-anchor="middle" dominant-baseline="middle">📡</text>
+            <text class="em" x="465" y="114" text-anchor="middle" dominant-baseline="middle">🐑📡</text>
 
             <!-- every sheep reaches the connector -->
             <path class="fan" d="M155 130 L65 168 M155 130 L155 168 M155 130 L245 168"/>

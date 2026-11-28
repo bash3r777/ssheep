@@ -25,6 +25,7 @@ import (
 
 	"ssheep.xyz/internal/flock"
 	"ssheep.xyz/internal/frame"
+	"ssheep.xyz/internal/netx"
 	"ssheep.xyz/internal/peer"
 	"ssheep.xyz/internal/proto"
 	"ssheep.xyz/internal/sshd"
@@ -40,6 +41,17 @@ type Target struct {
 	Name       string
 	RosterPath string
 	NodePath   string
+
+	// RelayPin and RelayPort are this machine's own relay, when it runs one.
+	// The sheep offers itself as a relay on the connection it already holds,
+	// rather than opening a second one -- see offerOn.
+	RelayPin  string
+	RelayPort int
+
+	// RelayAddr overrides where this machine says its relay can be reached,
+	// for when the guess is wrong -- a router forwarding a different external
+	// port, say. Empty means "work it out": see netx.CandidateAddrs.
+	RelayAddr string
 }
 
 // RunMany serves every flock this machine is a sheep in, all at once.
@@ -56,7 +68,7 @@ func RunMany(targets []Target, connectorAddr string) error {
 		wg.Add(1)
 		go func(t Target) {
 			defer wg.Done()
-			if err := Run(t.RosterPath, t.NodePath, connectorAddr); err != nil {
+			if err := Run(t, connectorAddr); err != nil {
 				log.Printf("sheep: flock %q: %v", t.Name, err)
 			}
 		}(t)
@@ -66,7 +78,8 @@ func RunMany(targets []Target, connectorAddr string) error {
 }
 
 // Run joins one flock and serves until the process is stopped.
-func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
+func Run(t Target, connectorAddr string) error {
+	rosterPath, nodeKeyPath := t.RosterPath, t.NodePath
 	sr, err := flock.LoadSignedRoster(rosterPath)
 	if err != nil {
 		return err
@@ -93,6 +106,9 @@ func Run(rosterPath, nodeKeyPath, connectorAddr string) error {
 		signed:     sr,
 		rosterPath: rosterPath,
 		only:       connectorAddr,
+		relayPin:   t.RelayPin,
+		relayPort:  t.RelayPort,
+		relayAddr:  t.RelayAddr,
 		links:      map[string]*runner{},
 		stop:       make(chan struct{}),
 	}
@@ -118,6 +134,10 @@ type Agent struct {
 
 	rosterPath string
 	only       string // if set, use only this connector
+
+	relayPin  string // this machine's relay fingerprint, when it runs one
+	relayPort int
+	relayAddr string // where it says that relay can be reached, if told
 
 	linkMu sync.Mutex
 	links  map[string]*runner
@@ -290,7 +310,7 @@ func (a *Agent) follow(r *runner) {
 // serveConnector holds one connection until it breaks or the link is stopped.
 func (a *Agent) serveConnector(r *runner) error {
 	c := r.conn
-	conn, err := peer.Dial(c.Addr, c.Pin, a.identity(), 15*time.Second)
+	conn, ready, err := peer.DialReady(c.Addr, c.Pin, a.identity(), 15*time.Second)
 	if err != nil {
 		if strings.Contains(err.Error(), "roster") || strings.Contains(err.Error(), "not in the") {
 			return fmt.Errorf("%w (%v)", errRevoked, err)
@@ -304,8 +324,17 @@ func (a *Agent) serveConnector(r *runner) error {
 		return nil
 	}
 
-	l := &link{addr: c.Addr, conn: conn, sessions: map[string]*tunnel.Session{}, shells: map[string]*tunnel.Conn{}}
+	l := &link{addr: c.Addr, conn: conn, done: make(chan struct{}), sessions: map[string]*tunnel.Session{}, shells: map[string]*tunnel.Conn{}}
+	defer close(l.done)
 	log.Printf("sheep: connected to %s", c.Addr)
+
+	// If this machine can relay, say so on the connection it already holds. A
+	// second connection from the same machine would evict this one, because a
+	// relay keeps one session per member -- and then the two would take turns
+	// locking each other out, dropping commands routed through either.
+	if a.relayPin != "" {
+		go a.offerOn(l, conn, ready)
+	}
 
 	// Ask for the current roster: the flock may have grown or shrunk since the
 	// invite was minted.
@@ -335,6 +364,70 @@ func (a *Agent) serveConnector(r *runner) error {
 			log.Printf("sheep: connector %s: %s", c.Addr, e.Message)
 		}
 	}
+}
+
+// offerEvery is how often a machine reminds the flock it can relay. It only has
+// to beat the relay's offer TTL, and re-offering also picks up an address that
+// changed under us.
+const offerEvery = 5 * time.Minute
+
+// offerOn tells each relay this machine can reach that this machine can relay
+// for the flock.
+//
+// It rides on the connection the machine already holds rather than opening its
+// own. A relay keeps one session per member, so a machine that connected twice
+// would have its two connections evict each other -- and a command routed to
+// whichever one happened to be current would then time out.
+//
+// Every address the machine might be reachable at is offered, and the master
+// keeps the ones that answer, so nobody has to work out which machine has a
+// public address.
+func (a *Agent) offerOn(l *link, conn *frame.Conn, ready proto.Ready) {
+	for {
+		mine := netx.CandidateAddrs(ready.YouAre, a.relayPort)
+		if a.relayAddr != "" {
+			mine = []string{a.relayAddr}
+		}
+		// Offering to our own relay is pointless: this machine already knows
+		// where it is.
+		if !contains(mine, l.addr) {
+			for _, addr := range mine {
+				if err := a.sendOffer(conn, addr); err != nil {
+					return
+				}
+			}
+		}
+		select {
+		case <-a.stop:
+			return
+		case <-l.done:
+			return
+		case <-time.After(offerEvery):
+		}
+	}
+}
+
+// sendOffer makes one signed offer of one address. The signature is what stops a
+// relay rewriting the address and pointing the flock at itself.
+func (a *Agent) sendOffer(conn *frame.Conn, addr string) error {
+	o := proto.Offer{
+		ID:   a.id,
+		Name: a.name,
+		Addr: addr,
+		Pin:  a.relayPin,
+		At:   time.Now().UTC(),
+		Sig:  ed25519.Sign(a.key.SignKey(), proto.OfferMessage(a.flock, a.id, addr, a.relayPin)),
+	}
+	return peer.Send(conn, proto.Wrap(proto.TypeOffer, o))
+}
+
+func contains(list []string, want string) bool {
+	for _, s := range list {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
 
 // adoptRoster accepts a newer roster, but only a well-signed one for this flock.
@@ -374,6 +467,7 @@ func (a *Agent) adoptRoster(env *proto.Envelope) {
 type link struct {
 	addr string
 	conn *frame.Conn
+	done chan struct{} // closed when this link ends, so helpers can stop
 
 	mu       sync.Mutex
 	sessions map[string]*tunnel.Session

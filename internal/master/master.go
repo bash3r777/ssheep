@@ -110,22 +110,25 @@ func Open(rosterPath, nodeKeyPath, connectorAddr string) (*Client, error) {
 // must not hold up the whole command.
 const dialTimeout = 5 * time.Second
 
-// dialAny tries each connector in preference order and returns the first that
-// accepts us. Losing a connector should mean a slower first attempt, not a
-// broken flock.
+// dialAny tries each relay in preference order and returns the first that
+// accepts us. Losing a relay should mean a slower first attempt, not a broken
+// flock — and not a complaint on every command, which is why the failures are
+// only reported when none of them worked.
 func dialAny(connectors []flock.Connector, who peer.Identity) (*frame.Conn, string, error) {
 	var lastErr error
+	var tried []string
 	for _, c := range connectors {
 		conn, err := peer.Dial(c.Addr, c.Pin, who, dialTimeout)
 		if err == nil {
 			return conn, c.Addr, nil
 		}
 		lastErr = err
-		if len(connectors) > 1 {
-			fmt.Fprintf(os.Stderr, "ssheep: connector %s: %v\n", c.Addr, err)
-		}
+		tried = append(tried, c.Addr)
 	}
-	return nil, "", fmt.Errorf("no connector answered: %w", lastErr)
+	if len(tried) == 1 {
+		return nil, "", fmt.Errorf("the relay did not answer: %w", lastErr)
+	}
+	return nil, "", fmt.Errorf("no relay answered (%s): %w", strings.Join(tried, ", "), lastErr)
 }
 
 // Connector reports which connector this client is talking to.
@@ -278,6 +281,97 @@ func (c *Client) List(timeout time.Duration) (proto.ListReply, error) {
 	case <-c.closed:
 		return empty, errors.New("master: lost the connector")
 	}
+}
+
+// ListAll asks every relay in the flock who is online and merges the answers.
+//
+// Presence is per relay: a machine counts as online at a relay when it is
+// connected to that relay. Every machine connects to every relay, so one relay is
+// normally enough -- but a machine that could not reach one relay still shows
+// through the others, and a relay that is down is skipped rather than reported as
+// a flock where nothing is online. That is what makes "online" a fact about the
+// flock instead of a fact about whichever relay happened to answer.
+//
+// It returns the merged list and the relays that answered, in preference order.
+func ListAll(rosterPath, nodeKeyPath, connectorAddr string, timeout time.Duration) (proto.ListReply, []string, error) {
+	sr, err := flock.LoadSignedRoster(rosterPath)
+	if err != nil {
+		return proto.ListReply{}, nil, err
+	}
+	roster, err := sr.Verify()
+	if err != nil {
+		return proto.ListReply{}, nil, err
+	}
+	connectors, err := roster.ConnectorsFor(connectorAddr)
+	if err != nil {
+		return proto.ListReply{}, nil, err
+	}
+
+	type result struct {
+		addr  string
+		reply proto.ListReply
+		err   error
+	}
+	ch := make(chan result, len(connectors))
+	for _, c := range connectors {
+		go func(c flock.Connector) {
+			cl, err := Open(rosterPath, nodeKeyPath, c.Addr)
+			if err != nil {
+				ch <- result{addr: c.Addr, err: err}
+				return
+			}
+			defer cl.Close()
+			reply, err := cl.List(timeout)
+			ch <- result{addr: c.Addr, reply: reply, err: err}
+		}(c)
+	}
+	results := make(map[string]result, len(connectors))
+	for range connectors {
+		r := <-ch
+		results[r.addr] = r
+	}
+
+	var best proto.ListReply
+	online := map[string]bool{}
+	var offers []proto.Offer
+	seenOffer := map[string]bool{}
+	var answered []string
+	var lastErr error
+	for _, c := range connectors {
+		r := results[c.Addr]
+		if r.err != nil {
+			lastErr = r.err
+			continue
+		}
+		answered = append(answered, c.Addr)
+		if best.Flock == "" || r.reply.Version > best.Version {
+			best = r.reply
+		}
+		for _, m := range r.reply.Members {
+			if m.Online {
+				online[m.ID] = true
+			}
+		}
+		for _, o := range r.reply.Offers {
+			k := o.ID + "|" + o.Addr
+			if seenOffer[k] {
+				continue
+			}
+			seenOffer[k] = true
+			offers = append(offers, o)
+		}
+	}
+	if len(answered) == 0 {
+		if lastErr == nil {
+			lastErr = errors.New("master: no relay answered")
+		}
+		return best, nil, lastErr
+	}
+	for i := range best.Members {
+		best.Members[i].Online = online[best.Members[i].ID]
+	}
+	best.Offers = offers
+	return best, answered, nil
 }
 
 // SheepNames returns the names of every member that can run commands.

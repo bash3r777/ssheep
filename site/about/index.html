@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>ssheep — how it works</title>
-<meta name="description" content="How ssheep works: the roster, the keys, what a connector can and cannot see, and many flocks on one machine.">
+<meta name="description" content="How ssheep works: the roster, the keys, what a relay can and cannot see, and many flocks on one machine.">
 <link rel="stylesheet" href="/style.css?v=38">
 </head>
 <body>
@@ -31,22 +31,22 @@
 
   <h2>One command, then one line per machine</h2>
   <p><code>ssheep master flock "myflock"</code> creates the flock, pre-adds the project's
-  public relay, and prints one line per machine — a sheep, a connector, and a spare
-  master. Each line installs the binary <em>and</em> joins, and the ticket says what the
-  machine is to be, so there is no verb to get wrong:</p>
+  public relay, and prints one line per machine — three sheep and a spare master. Each
+  line installs the binary <em>and</em> joins, and the ticket says what the machine is to
+  be, so there is no verb to get wrong:</p>
 <pre class="plain">curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "&lt;ticket&gt;"</pre>
   <p class="muted">The installer does the joining itself, by the full path it just wrote to,
   so it works whether or not that directory happens to be on PATH.</p>
 
   <div class="grid2">
     <div>
-      <h2>The three roles</h2>
+      <h2>The roles</h2>
       <table>
         <tr><td>👑 <b>master</b></td><td>Holds a flock's key, mints tickets, sends commands. Needs no reachable address, so it can be a laptop that is usually off.</td></tr>
         <tr><td>🐑 <b>sheep</b></td><td>A managed machine. Dials out and keeps the connection open. Holds only its own private key.</td></tr>
-        <tr><td>📡 <b>connector</b></td><td>A directory and a relay, and a member of the flock like anything else. The only machine that needs a reachable address — and it can be any machine.</td></tr>
+        <tr><td>📡 <b>relay</b></td><td>A sheep that happens to be reachable. It runs the relay itself and offers itself to the flock, so nobody has to pick one — the machines that can be reached help, and the rest simply stay sheep.</td></tr>
       </table>
-      <p class="muted">It is one binary. The role is just the subcommand you run. A machine can hold different roles in different flocks.</p>
+      <p class="muted">It is one binary. The role is just the subcommand you run, and a machine can hold different roles in different flocks.</p>
     </div>
     <div>
       <h2>What keeps it safe</h2>
@@ -58,7 +58,7 @@
       <p>It signs rosters, so it is needed to add or remove a machine — and for nothing
       else. Keep it offline, and never on a connector.</p>
       <h3>Peers verify each other, not the relay</h3>
-      <p>A connector checks that a connecting machine holds the key the roster says it
+      <p>A relay checks that a connecting machine holds the key the roster says it
       holds, and then forwards opaque payloads. Master and sheep agree on an encryption key
       between themselves, using ephemeral keys signed by their permanent ones. The relay
       sees ciphertext it can neither read nor forge.</p>
@@ -67,12 +67,12 @@
 
   <div class="grid2">
     <div>
-      <h2>The connector can</h2>
+      <h2>The relay can</h2>
       <div class="step"><span class="n">✓</span><span class="x">see which machines are talking, when, and what they are called</span></div>
       <div class="step"><span class="n">✓</span><span class="x">route between them, and say who is not welcome</span></div>
     </div>
     <div>
-      <h2>The connector cannot</h2>
+      <h2>The relay cannot</h2>
       <div class="step"><span class="n">✗</span><span class="x">read a command or its output, forge one, or impersonate anyone</span></div>
       <div class="step"><span class="n">✗</span><span class="x">add itself to the flock, or accept a roster signed by anything but the flock key</span></div>
     </div>
@@ -81,7 +81,7 @@
   <h2>Many flocks, one machine</h2>
   <p>A machine is not tied to one flock. Run <code>ssheep master</code> twice and you hold two flocks;
   hand a machine two tickets and it serves both. Each flock is entirely its own: its own key,
-  its own roster, its own connectors, its own name for the machine. Nothing is shared between
+  its own roster, its own relays, its own name for the machine. Nothing is shared between
   them, so being in a second flock cannot leak anything into the first.</p>
   <p>This is why a machine holds a separate key in every flock. A ticket is minted before the
   machine it is meant for has ever been spoken to, so the key has to come from the ticket —
@@ -90,8 +90,8 @@
 <pre class="plain">ssheep master flock "home"     # a second flock, on the same machine
 ssheep master flock "work"
 ssheep flock list              # every flock this machine knows</pre>
-  <p class="muted">A relay can serve many flocks at once, and a connector can be a connector for
-  several at the same time. One reachable machine, one port, many flocks.</p>
+  <p class="muted">One relay can serve many flocks at once, so one reachable machine — one
+  port — can carry several flocks at the same time.</p>
 
   <h2>More than one master</h2>
   <p>The flock key is the authority — it signs the roster, so whoever holds it can add
@@ -120,40 +120,47 @@ ssheep flock list              # every flock this machine knows</pre>
   yourself — a systemd user unit is the tidy way — and a shell here is your own
   environment, dotfiles and all. Linux and macOS only, since it needs a pty.</p>
 
-  <h2>How a connector finds its own address</h2>
-  <p>A master cannot know a connector's address in advance — the connector is the machine
-  with the public address, and the master has never spoken to it. So the connector says so
-  itself: it asks the flock what it looks like from outside, and offers itself at that
-  address on its listening port, through whatever connector the flock already has.</p>
-  <p>Three things have to line up before the offer is believed, and the middle one is the
-  point: the roster must list that machine as a connector — only the master can do that —
-  the offer must be signed by that machine, so the relay that carried it could not have
-  rewritten the address and promoted itself, and the address must answer with exactly the
-  certificate the offer claims.</p>
-  <p class="muted">If the guess is wrong, the master says so and adds nothing, and
-  <code>--addr</code> is there to be told the truth.</p>
+  <h2>How a machine becomes the relay</h2>
+  <p>A master cannot know a relay's address in advance — the relay is the machine with the
+  public address, and the master has never spoken to it. So the machine says so itself:
+  every machine asks the flock what it looks like from outside, works out every address it
+  might be reachable at, and offers itself on the connection it already holds to each
+  relay in the flock.</p>
+  <p>Four things have to line up before the offer is believed. The roster must say that
+  machine may relay — every ticket grants it, and only the master can open that gate. The
+  offer must be signed by that machine, so the relay that carried it could not have
+  rewritten the address and promoted itself. The address must answer with exactly the
+  certificate the offer claims. And the machine must not already be relaying, so a machine
+  that offers several addresses is counted once.</p>
+  <p class="muted">Every address is offered and the first that answers wins, so nobody has
+  to work out which machine has a public address. If none answers — a machine behind a NAT
+  with no port forwarding, or a closed port — the master says so and adds nothing, and the
+  machine stays a sheep. <code>--addr</code> is there to be told the truth when the guess
+  is wrong.</p>
 
   <h2>Adding and removing machines</h2>
   <p><code>ssheep master</code> generates a key pair for each new machine, adds its public key
   to the roster, re-signs it, and prints a ticket. The printed line installs the binary and
   joins in one command, and the ticket says what the machine is to be — a sheep, a
-  connector, or another master. The ticket carries that machine's private key, so hand it
-  over privately. <code>ssheep forget --name sheep-2</code> removes one and publishes the
-  new roster; connectors drop it within seconds.</p>
+  dedicated relay, or another master. The ticket carries that machine's private key, so hand
+  it over privately. <code>ssheep forget --name sheep-2</code> removes one and publishes the
+  new roster; relays drop it within seconds.</p>
 
-  <h2>More than one connector</h2>
-  <p>A single connector is a single point of failure, which is a strange thing for a tool
-  whose point is not needing anyone. A flock can list several: every sheep keeps a link to
-  each of them, and a master tries them in order. Losing one costs the flock nothing. A new
-  flock starts with the project's public relay already listed, so it works before its owner
-  has run a connector of their own.</p>
+  <h2>More than one relay</h2>
+  <p>A single relay is a single point of failure, which is a strange thing for a tool
+  whose point is not needing anyone. So a flock keeps a handful: every machine keeps a link
+  to each of them, and a master tries them in order. Losing one costs the flock nothing, and
+  <code>see</code> asks every relay and merges the answers, so "online" is a fact about the
+  flock rather than about whichever relay replied. A new flock starts with the project's
+  public relay already listed, so it works before its owner has a reachable machine of
+  their own — and as machines join, the ones that can be reached take over the relaying.</p>
 
   <h2>What is missing</h2>
   <p>File transfer and port forwarding, and direct peer-to-peer connections. Today every
-  byte goes through a connector, and <code>run</code> executes a command and streams its
-  output back. Online and offline is reported per connector, so with several connectors a
-  machine connected to a different one can look offline. The relay path is the floor;
-  direct connections would sit on top of it rather than replace it.</p>
+  byte goes through a relay, and <code>run</code> executes a command and streams its
+  output back. A machine behind a NAT with no port forwarding and no IPv6 cannot relay yet;
+  UPnP and hole punching would sit on top of the relay rather than replace it. The relay
+  path is the floor.</p>
 
   <footer class="foot">
     <a href="/">ssheep</a>

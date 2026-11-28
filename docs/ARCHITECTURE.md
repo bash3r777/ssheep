@@ -4,23 +4,24 @@
 
 ```
           invite (a ticket)                join
-  master ─────────────────►  sheep  ──────────────►  connector
+  master ─────────────────►  sheep  ──────────────►  relay
    (no open ports)              │                          │
                                 │  end-to-end encrypted    │  relays, cannot read
                                 └──────────  ......  ──────┘
 ```
 
-Three roles, one binary.
+Two roles you set up, and one a machine takes on by itself.
 
 | Role | Job | Holds secrets | Must be reachable |
 |---|---|---|---|
 | **master** | Mints tickets, issues commands, holds the authority key | yes — the flock key | no |
-| **connector** | Address book and relay. A member of the flock like any other, which is how it tells the flock where it is. | no | yes |
 | **sheep** | Does the work | only its own key | no |
+| **relay** | Address book and forwarding. A sheep that happens to be reachable, which is how it tells the flock where it is. | no | yes |
 
-Sheep and masters only ever dial *out*. That is why no ports need to be
-open anywhere except on the connector — and a connector can be any machine
-that happens to be reachable, including another sheep.
+Sheep and masters only ever dial *out*. A machine that can also be dialled back —
+a public address, a global IPv6 address, a forwarded port — starts relaying for
+the flock on its own. Nobody has to work out which machine that is: every machine
+tries, and the ones the master can reach are the ones that relay.
 
 ## The model
 
@@ -47,16 +48,16 @@ operator hands it over deliberately.
    key, and a copy of the roster. The printed line does both at once —
    `… | sh -s -- --ticket "<ticket>"` — so the machine is installed and joined by
    one command, run by the installer at the path it just wrote to.
-3. The machine connects to a connector, which challenges it to sign a random
+3. The machine connects to a relay, which challenges it to sign a random
    nonce, and the signature is checked against the roster. The roster travels
-   with the authentication message, so a connector that has never met the flock
-   learns it in the same breath. No secret is ever sent to the connector.
+   with the authentication message, so a relay that has never met the flock
+   learns it in the same breath. No secret is ever sent to the relay.
 4. From then on it is simply *in*.
 
 The ticket is single use in the sense that it carries a key pair. `ssheep
 forget --name pi` removes the entry and re-signs, which is the revocation.
 
-## What the connector can and cannot do
+## What a relay can and cannot do
 
 It can:
 
@@ -74,8 +75,8 @@ It cannot:
 - accept a roster signed by anybody other than that flock's key
 - route between flocks, or tell one flock about another
 
-Every payload the connector forwards is encrypted between master and sheep
-using keys it never sees. So running a connector on somebody else's machine is
+Every payload a relay forwards is encrypted between master and sheep
+using keys it never sees. So running a relay on somebody else's machine is
 not a trust decision.
 
 ## The protocol
@@ -101,7 +102,7 @@ All of it is the Go standard library. There is no third-party crypto.
 ## Revocation
 
 `forget` removes the entry, bumps the roster version, and publishes the new
-roster to every connector in the flock. A connector adopts a published roster
+roster to every relay in the flock. A relay adopts a published roster
 only if it verifies *and* is signed by the same flock key it already trusts, so
 nobody can push a roster of their own and take the flock. Within a couple of
 seconds it drops any connection whose key is no longer listed, and refuses it
@@ -109,10 +110,10 @@ next time. Sheep ask for the current roster when they connect, so they see the
 change too.
 
 This is honest about its limits: a direct conversation between two machines that
-never consults the connector cannot be interrupted by a roster change. Making
+never consults a relay cannot be interrupted by a roster change. Making
 revocation instant in a peer-to-peer network is a hard problem, and for now the
-answer is that the connector is the chokepoint, so revoking works for as long as
-the connector is in the path.
+answer is that the relay is the chokepoint, so revoking works for as long as
+the relay is in the path.
 
 ## More than one master
 
@@ -122,14 +123,14 @@ flock whose key lives on one laptop cannot be changed the day that laptop dies.
 
 So a master ticket carries the flock key itself (`invite.Invite.Flock`), and the
 machine that takes it is a master in the full sense: it can mint tickets, revoke
-machines, accept a connector's offer and run commands. `ssheep master` mints one
-spare by default, because a single copy of the key is a single point of failure for
-the one thing you cannot reproduce.
+machines, accept a machine's offer to relay and run commands. `ssheep master` mints
+one spare by default, because a single copy of the key is a single point of failure
+for the one thing you cannot reproduce.
 
 A second master needs nothing special to run — a master is not a service; it
 connects like any member when you type a command. But a master that has been away
 holds a stale roster, and a stale roster cannot verify a machine added since, so
-the handshake fails with no clue why. `master.Open` therefore asks the connector
+the handshake fails with no clue why. `master.Open` therefore asks a relay
 for the roster and adopts it when it is newer, once per command, under the same
 rules a sheep uses: it must verify, and be signed by the same flock key.
 
@@ -153,8 +154,8 @@ A machine is not tied to a flock, and a flock is not tied to a machine.
   key belongs to the flock, so a ticket can be minted for a machine nobody has
   met, and the same box looks like a different machine to each flock it is in.
 - **Roles are per flock too.** A machine can be a sheep in one flock and a
-  connector in another. `ssheep flock list` prints the role this machine holds in
-  each.
+  dedicated relay in another. `ssheep flock list` prints the role this machine
+  holds in each.
 
 `ssheep master flock "<name>"` creates as many flocks as you ask for. Every
 command that takes a flock takes it as the first argument (`ssheep see "work"`,
@@ -162,7 +163,7 @@ command that takes a flock takes it as the first argument (`ssheep see "work"`,
 
 ## One relay, many flocks
 
-A connector can serve many flocks at once. That is what makes a donated relay
+A relay can serve many flocks at once. That is what makes a donated relay
 possible: one machine in a good network position can serve a hundred strangers
 without having been told about any of them in advance.
 
@@ -186,58 +187,87 @@ Serving strangers is a decision worth making out loud, and the limits — how ma
 flocks, how many connections, how many members — belong to whoever is paying for
 the bandwidth.
 
-## How a connector gets into the roster
+## How a machine becomes a relay
 
-A connector is a member of the flock, with a key and a role, and that is what
-solves the last awkward part of setting up: the master cannot know a connector's
-address, because the connector is the machine with the public address and the
-master has never spoken to it.
+The last awkward part of setting up was this: the master cannot know a relay's
+address, because the relay is the machine with the public address and the master
+has never spoken to it. The answer is that the machine says so itself.
 
-So the connector announces itself. It asks the flock what it looks like from
-outside (`Ready.YouAre` — the connector's view of the connection), works out the
-address it should be reachable at, and sends a signed **offer** through whatever
-connector the flock already has. The master reads offers on its next command and
-accepts the ones it believes.
+Every machine is allowed to offer. It asks the flock what it looks like from
+outside (`Ready.YouAre` — the relay's view of the connection), works out every
+address it might be reachable at, and sends a signed **offer** on the connection
+it already holds to each relay in the flock. The master reads offers on its next
+command and accepts the ones it believes.
 
-Three checks stand between an offer and the roster:
+Every address is offered — a global IPv6 address first, then what a relay sees it
+as, then its own addresses on the local network — because only the master can tell
+which of them the flock can reach. The first that answers wins, and the flock
+keeps one relay per machine.
 
-1. **the roster lists that machine as a connector.** Only the master can add one,
-   so an ordinary sheep cannot promote itself.
+Four checks stand between an offer and the roster:
+
+1. **the roster says that machine may relay.** Every ticket grants it, so no
+   operator has to decide anything; what the flag keeps is a gate only the master
+   can open, so a stranger cannot walk in as a relay.
 2. **the offer is signed by that machine.** The relay in the middle sees the offer
    in the clear, so without a signature it could rewrite the address and point the
    flock at itself.
 3. **the address answers with exactly the certificate the offer claims.** The
    master dials it and checks the fingerprint before writing anything down.
+4. **the machine is not already relaying.** A machine that offers several
+   addresses is counted once, so the cap counts machines, not addresses.
 
-If the guess is wrong — a machine behind a NAT with no port forwarding — the
-master says so and nothing is added, and `--addr` is there to be told the truth.
-A flock is still perfectly usable with no connector of its own: a new one starts
-with the project's public relay in its roster.
+If nothing answers — a machine behind a NAT with no port forwarding, or a closed
+port — the master says so and nothing is added; the machine stays a sheep and
+tries again later. `--addr` is there to be told the truth when the guess is wrong,
+for a router that forwards a different external port.
 
-## More than one connector
+The offer rides on the connection the machine already holds rather than a
+connection of its own. A relay keeps one session per member, so a machine that
+connected twice would have its two connections evict each other, and a command
+routed to whichever happened to be current would time out. One connection per
+machine per relay, always.
 
-A single connector is a single point of failure: its bad afternoon becomes the
+A flock is still perfectly usable with no relay of its own: a new one starts with
+the project's public relay in its roster, which is the bootstrap that lets the very
+first machine be behind anything. As machines join, the ones that can be reached
+take over the relaying, and the flock quietly stops depending on the project's.
+
+## More than one relay
+
+A single relay is a single point of failure: its bad afternoon becomes the
 flock's, which is a strange thing for a design whose whole point is not needing
-anyone. So a flock lists as many as it likes.
+anyone. So a flock keeps a handful.
 
-- **Every sheep connects to all of them** and holds each link open. If one goes
-  down the sheep logs it, backs off, and rejoins when it comes back. Losing a
-  connector costs the flock nothing.
+- **Every machine connects to all of them** and holds each link open. If one goes
+  down the machine logs it, backs off, and rejoins when it comes back. Losing a
+  relay costs the flock nothing.
 - **A master tries them in roster order** and uses the first that answers, so
-  the order *is* the preference order. A dead connector costs five seconds, not
-  a broken command.
-- **Sessions are per link.** A master reaching a sheep through one connector is
-  a different conversation from the same master reaching it through another,
+  the order *is* the preference order. A dead relay costs five seconds, not a
+  broken command.
+- **Presence is merged across all of them.** `see` asks every relay who is online
+  and takes the union, so "online" is a fact about the flock, not about whichever
+  relay happened to answer. A relay that is down is skipped rather than reported
+  as a flock where nothing is online.
+- **Sessions are per link.** A master reaching a machine through one relay is a
+  different conversation from the same master reaching it through another,
   because the two paths have nothing to do with each other.
 
-`ssheep connector add --addr <host:port>` reads the fingerprint from the
-connector itself, rewrites the roster and publishes it. `connector list` probes
-each one and reports whether it answers — and whether its fingerprint has
-*changed*, which is the one failure that should never pass silently.
+The count is capped, and the cap is the point. A relay per machine would be a link
+per machine per relay, which is the difference between this working at ten
+machines and at a hundred — so a flock keeps a few, and every machine holds only
+that many links. Automatic relays that have stopped answering are dropped, so a
+machine that moved or went away does not hold a slot forever; a relay the operator
+added by hand is the operator's to remove.
 
-Adding connectors makes the flock harder to take down. It does not make it
-faster and it does not make it more private — it just means no single machine
-can end it.
+`ssheep connector add --addr <host:port>` is still there for a relay added by
+hand: it reads the fingerprint from the relay itself, rewrites the roster and
+publishes it. `connector list` probes each one and reports whether it answers —
+and whether its fingerprint has *changed*, which is the one failure that should
+never pass silently.
+
+Adding relays makes the flock harder to take down. It does not make it faster and
+it does not make it more private — it just means no single machine can end it.
 
 ## The shell
 
@@ -285,22 +315,30 @@ doing one thing to many machines at once.
 
 ## Deliberate omissions
 
-- **Direct connections.** Today every byte goes through a connector. IPv6,
-  UPnP and hole punching are all upgrades that sit *on top of* the relay rather
-  than replacing it — the relay stays as the fallback that always works.
+- **Direct connections.** Today every byte goes through a relay. IPv6 is already
+  tried first when a machine offers, and UPnP and hole punching are upgrades that
+  sit *on top of* the relay rather than replacing it — the relay stays as the
+  fallback that always works. UPnP is the one that would let an ordinary home
+  machine relay with nobody forwarding a port; it is not built.
 - **File transfer and port forwarding.** There is no `copy`, no `-L`, no
   `-R`, and no `ProxyCommand`. The session is a byte channel, so all three sit
   on top of it rather than needing a new design — but none is built.
 - **The shell is Linux and macOS only.** It needs a pty, and that is the one
   place the code is platform-specific. A Windows sheep can be commanded, not
   logged into.
-- **A directory of volunteer relays.** One default relay is built in, and a
-  connector registers itself with its flock. What does not exist yet is a pool of
-  volunteered relays, and the client-side selection that would spread flocks
-  across several.
+- **A directory of volunteer relays.** A new flock starts with the project's
+  public relay, and grows its own relays as machines join. What does not exist
+  yet is a published pool of volunteered relays to bootstrap from, so a brand-new
+  flock depends on the one built-in address until it has a reachable machine of
+  its own.
 - **Per-flock quotas.** A relay can cap flocks, connections and members in
   total, but not per flock, so one member of the community could still be the
   noisy one.
-- **Roster freshness between machines.** Online/offline is reported per
-  connector, so with several connectors a machine connected to a different one
-  shows as offline to a master asking elsewhere.
+- **A relay's identity is its own certificate, not the machine's key.** The offer
+  is signed by the machine, and the master checks that the address answers with
+  the fingerprint the offer names, so a relay in the middle cannot rewrite the
+  address. But every machine may relay, so a compromised member could offer a
+  relay it controls and watch the metadata passing through it — it still cannot
+  read a command. Deriving each relay's TLS identity from the machine's own key
+  would let the master prove a relay belongs to the machine that offered it, and
+  would remove a file.

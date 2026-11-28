@@ -35,6 +35,7 @@ type Flock struct {
 	Roster     flock.Roster
 	ID         string
 	Role       string // this machine's role, or "" when it is not a member
+	MayRelay   bool   // whether this machine may offer itself as a relay
 }
 
 // Mastered reports whether this machine holds this flock's authority key.
@@ -104,6 +105,7 @@ func Create(name string) (*Flock, error) {
 			SignKey: machine.SignPub(),
 			KexKey:  kex,
 			Added:   now,
+			Relay:   true,
 		}},
 		IssuedAt: now,
 	}
@@ -141,6 +143,7 @@ func Open(name string) (*Flock, error) {
 	if key, err := f.Key(); err == nil {
 		if m := r.Find(flock.NodeID(key.SignPub())); m != nil {
 			f.Role = m.Role
+			f.MayRelay = m.MayRelay()
 		}
 	}
 	return f, nil

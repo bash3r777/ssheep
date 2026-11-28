@@ -8,14 +8,17 @@
 
 WHAT IT IS
   Control machines ("sheep") from a machine you hold ("the master") through a
-  blind relay ("a connector").
+  blind relay ("a relay").
   - A sheep only ever dials OUT, so it needs no open port and no public address.
+  - A sheep that CAN be reached also runs the relay and offers itself to the flock,
+    so nobody has to pick a relay: every machine tries, the reachable ones are
+    used, and the rest stay sheep. See "AUTOMATIC RELAYING" below.
   - Everything between master and sheep is end-to-end encrypted (X25519 + AES-GCM).
-    A connector forwards ciphertext it cannot read and cannot forge.
+    A relay forwards ciphertext it cannot read and cannot forge.
   - The flock is defined by a small signed file (the roster). The only secret is
     the flock key, which signs rosters and is needed only to add or remove a machine.
-  - One machine can be in MANY flocks, each with its own key and roster, and a
-    relay and a connector can serve several flocks at once.
+  - One machine can be in MANY flocks, each with its own key and roster, and one
+    relay can serve several flocks at once.
 
 INSTALL
   curl -fsSL https://ssheep.xyz/install.sh | sh
@@ -28,11 +31,10 @@ SETUP — ONE COMMAND, THEN ONE LINE PER MACHINE
   1. on the machine you control from (the "master"):
        ssheep master flock "myflock"
      This creates the flock, pre-adds the project's public relay, mints tickets,
-     and prints one line per machine, in three groups:
-       🐑 sheep       a machine you manage
-       📡 connector   the machine with a public address
-       👑 master      a second master; carries the flock key (one minted by default)
-     It also reports the flock and accepts any connector that has registered.
+     and prints one line per machine, in two groups:
+       🐑 sheep    a machine you manage (three by default)
+       👑 master   a second master; carries the flock key (one by default)
+     It also reports the flock and accepts any machine that has offered to relay.
 
   2. paste each line as printed:
        curl -fsSL https://ssheep.xyz/install.sh | sh -s -- --ticket "<ticket>"
@@ -47,9 +49,29 @@ SETUP — ONE COMMAND, THEN ONE LINE PER MACHINE
 
   Opinionated defaults, all overridable:
     public relay    relay.ssheep.xyz:7000, pre-added to the roster --relay / --private
-    tickets minted  3 sheep, 1 connector                          --sheep N / --connector N
+    tickets minted  3 sheep                                       --sheep N / --connector N
     spare masters   1 (a master ticket carries the flock key)     --masters N
-    connector port  7000                                          --port
+    relay port      7000                                          --port
+
+AUTOMATIC RELAYING
+  Every machine may relay; whether it can is a question only the network answers.
+  - The sheep starts a relay on its port and, on the connection it already holds to
+    each relay in the flock, offers every address it might be reachable at: a
+    global IPv6 address first, then what a relay sees it as, then its own addresses
+    on the local network.
+  - The master reads the offers, and accepts a machine as a relay only when one of
+    its addresses answers with exactly the certificate the offer claims. The first
+    that answers wins, and the flock keeps ONE relay per machine.
+  - If nothing answers (NAT with no port forwarding, or a closed port), nothing is
+    added and the machine stays a sheep. It tries again later.
+  - A flock keeps a handful of relays, not one per machine: a relay per machine
+    would be a link per machine per relay. Automatic relays that have stopped
+    answering are dropped, so a machine that moved can take the slot. A relay the
+    operator added by hand is not dropped automatically.
+  - A new flock starts with the project's public relay, so the very first machine
+    can be behind anything; as machines join, the reachable ones take over.
+  - `ssheep see` shows which machines are relaying, and asks EVERY relay for
+    presence and merges the answers, so "online" is a fact about the flock.
 
 MULTIPLE FLOCKS
   A machine can be in as many flocks as you like, and holds a SEPARATE KEY in each.
@@ -58,10 +80,10 @@ MULTIPLE FLOCKS
     ssheep see                   every flock, live
     ssheep see "myflock"         one flock
     ssheep run "myflock" -- CMD  run in one flock
-  A machine can be a sheep in one flock and a connector in another. A relay and a
-  connector can serve several flocks at once: one reachable machine, one port. Each
-  flock is entirely separate — its own key, roster, connectors and machine names —
-  so being in a second flock cannot leak anything into the first.
+  A machine can be a sheep in one flock and a dedicated relay in another. One relay
+  can serve several flocks at once: one reachable machine, one port. Each flock is
+  entirely separate — its own key, roster, relays and machine names — so being in a
+  second flock cannot leak anything into the first.
 
 SHELL
   ssheep shell <flock> --name NAME            an interactive terminal on one machine
@@ -86,10 +108,10 @@ SHELL
 
 MULTIPLE MASTERS
   A master ticket is the only one that carries the flock key, so the machine that takes it can
-  add and remove machines, mint tickets and accept a connector's offer — exactly as
+  add and remove machines, mint tickets and accept a machine's offer to relay — exactly as
   the first master does. `--masters 0` mints none.
   - A master has no service: it connects when you run a command. As it connects it
-    asks the connector for the current roster and adopts it when it is newer, under
+    asks a relay for the current roster and adopts it when it is newer, under
     the same rules a sheep uses, so a master that has been away still sees machines
     added since.
   - The cost is real: the flock key then exists in two places. Mint as few master
@@ -97,10 +119,12 @@ MULTIPLE MASTERS
 
 STATE
   Everything lives under $SSHEEP_DIR, default ~/.ssheep, one directory per flock:
-    ~/.ssheep/flocks/<name>/flock.key.json   the flock key. SENSITIVE. Off the connector.
+    ~/.ssheep/flocks/<name>/flock.key.json   the flock key. SENSITIVE. Off the relay.
                                              Present only where a master ticket put it.
     ~/.ssheep/flocks/<name>/node.key.json    this machine's identity in that flock. SENSITIVE.
     ~/.ssheep/flocks/<name>/roster.json      the signed roster. Public; safe to share.
+    ~/.ssheep/connector.crt, connector.key   this machine's relay identity, shared by
+                                             every flock it relays for. Public.
   Once enrolled, a machine needs no arguments: `ssheep sheep` and
   `ssheep connector` know what they are — and which flocks they are for.
   (The old `--dir <path>` flag still works; it now just sets $SSHEEP_DIR.)
@@ -109,21 +133,25 @@ ROLES
   master     holds a flock key, mints tickets, sends commands. More than one is
              fine: a master ticket carries the flock key, so any master can add and
              remove machines. Keep master lines as safe as the master machine.
-  sheep      runs the agent, executes commands
-  connector  blind relay + address book; also a member, which is how it tells the
-             flock where it is. The only role needing a reachable address.
-  One binary does all three; the role is a subcommand, or read from the ticket.
+  sheep      runs the agent, executes commands, and relays for its flocks when it
+             can be reached. Only ever dials out.
+  connector  a machine whose ONLY job is relaying, for when you want to say so out
+             loud. Optional; a sheep relays on its own when it can.
+  One binary does all of them; the role is a subcommand, or read from the ticket.
 
 COMMANDS
   ssheep master [flock] <name> [--relay H:PORT] [--private] [--sheep N]
                 [--connector N] [--masters N] [--invite] [--watch 3m]
-                                          set up a flock; prints the lines to paste
+                                          set up a flock; prints the lines to paste.
+                                          --connector N (default 0) mints dedicated-
+                                          relay tickets instead of relying on the
+                                          automatic ones.
   ssheep join "<ticket>"                  take a ticket: install it, then be what it
                                           says (sheep and connector serve; master
                                           installs and reports). --install-only to
                                           take it and stop
   ssheep sheep "<ticket>"                 same, when you know it is a sheep
-  ssheep connector "<ticket>"             same, for a connector (--addr H:PORT,
+  ssheep connector "<ticket>"             same, for a dedicated relay (--addr H:PORT,
                                           --port N, --public)
   ssheep see [<flock>]                    the flocks, live (all of them by default)
   ssheep run <flock> -- CMD...            every sheep in one flock
@@ -136,8 +164,8 @@ COMMANDS
   step by step, when you want control:
   ssheep invite <flock> --name N [--role R]  mint one ticket (roles: sheep, connector, master)
   ssheep connector                        run a relay with no flock of its own
-  ssheep connector add|remove|list        manage a flock's connectors by hand
-  ssheep pin --addr H:PORT                print a connector's fingerprint
+  ssheep connector add|remove|list        manage a flock's relays by hand
+  ssheep pin --addr H:PORT                print a relay's fingerprint
 
 EXIT CODES AND OUTPUT
   run exits non-zero when a command fails, and prints "<machine>: exited with status N".
@@ -145,23 +173,27 @@ EXIT CODES AND OUTPUT
 
 GOTCHAS WORTH KNOWING
   - A new flock starts with the project's public relay (relay.ssheep.xyz:7000)
-    already in its roster, so it works before you have run a connector of your
+    already in its roster, so it works before you have a reachable machine of your
     own. Use --private to have none.
-  - A connector works out what address it is at by asking the flock what it looks
-    like from outside. Behind a NAT with no port forwarding that guess is wrong;
-    the master will say so, and --addr is there to be told the truth.
-  - More than one connector is worth doing: machines try them in roster order and
-    survive losing any of them. A single connector is a single point of failure.
-  - Online/offline is reported PER CONNECTOR. With several connectors, a machine
-    connected to a different one can show as offline.
-  - A connector serves only the flock it was given unless started with --public.
+  - A machine works out what address it is at by asking the flock what it looks like
+    from outside, and offers every candidate. Behind a NAT with no port forwarding
+    nothing answers, the master says so, and the machine stays a sheep. --addr is
+    there to be told the truth (a router forwarding a different external port).
+  - More than one relay is worth doing: machines try them in roster order and
+    survive losing any of them. A single relay is a single point of failure.
+  - `see` asks every relay and merges the answers, so online means online in the
+    flock, not at one relay.
+  - A machine keeps ONE connection per relay. It offers itself on that connection;
+    a second connection would evict the first, because a relay keeps one session per
+    member.
+  - A relay serves only the flock it was given unless started with --public.
   - A machine in two flocks needs the ticket for EACH; it does not reuse an
     identity across flocks, by design.
-  - Revocation is enforced by connectors; a machine already in a direct conversation
+  - Revocation is enforced by relays; a machine already in a direct conversation
     is not interrupted until it reconnects.
   - Changing a relay's certificate strands its members: they pin the fingerprint
     and cannot fetch the roster that would tell them the new one.
-  - No interactive shell or file transfer yet. run executes and streams output.
+  - No file transfer, no port forwarding. run executes and streams output.
 
 WHAT IT IS NOT
   - Not audited. Not hardened. Assume bugs.

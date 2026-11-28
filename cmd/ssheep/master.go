@@ -121,7 +121,7 @@ func addRelay(f *local.Flock, addr string) error {
 	if err := sr.Save(f.RosterPath); err != nil {
 		return err
 	}
-	fmt.Printf("    connector  %s\n", addr)
+	fmt.Printf("    relay      %s\n", addr)
 	return nil
 }
 
@@ -132,8 +132,8 @@ func printTickets(f *local.Flock, sheepN, connN, masterN int) error {
 		role string
 		head string
 	}{
-		{sheepN, flock.RoleSheep, "🐑 run this on each machine you want to be a Sheep 🐑"},
-		{connN, flock.RoleConnector, "📡 run this on each machine you want to be a Connector 📡"},
+		{sheepN, flock.RoleSheep, "🐑 run this on every machine you want in the flock"},
+		{connN, flock.RoleConnector, "📡 run this on a machine you want to relay and do nothing else:"},
 		{masterN, flock.RoleMaster, "👑 run this on each machine you want to be a Master 👑"},
 	}
 	for _, b := range blocks {
@@ -150,6 +150,8 @@ func printTickets(f *local.Flock, sheepN, connN, masterN int) error {
 		}
 	}
 	fmt.Printf("\nEach ticket works once, on one machine, and carries that machine's private key.\n")
+	fmt.Printf("Machines relay for the flock on their own when they can be reached, so there is\n")
+	fmt.Printf("nothing to work out and no machine to pick.\n")
 	if masterN > 0 {
 		fmt.Printf("A master ticket also carries the flock key — the authority to add and remove\n")
 		fmt.Printf("machines. Keep those lines as safe as this machine.\n")
@@ -216,6 +218,10 @@ func mintInvite(flockName, name, role string) (string, error) {
 		SignKey: machine.SignPub(),
 		KexKey:  kex,
 		Added:   time.Now().UTC().Truncate(time.Second),
+		// Every machine may relay. Whether it can is a question only the network
+		// can answer, so the machine tries and the master checks -- which is why
+		// nobody has to work out which box has a public address.
+		Relay: true,
 	})
 	r = r.Bump()
 	sr, err := flock.SignRoster(r, authority.SignKey())
@@ -240,30 +246,33 @@ func mintInvite(flockName, name, role string) (string, error) {
 	return invite.Encode(in)
 }
 
-// acceptOffers takes on any connector that has registered itself since last time.
+// acceptOffers takes on any machine that has registered itself since last time.
+//
+// It runs on every `master` command rather than only when something looks
+// waiting, because a machine that moved offers a new address that looks like
+// nothing new until the old one is found to be dead -- and only AcceptOffers can
+// make that call.
 func acceptOffers(f *local.Flock) {
-	pending, err := master.PendingOffers(f.RosterPath, f.NodePath, "")
-	if err != nil || len(pending) == 0 {
-		return
+	if pending, _ := master.PendingOffers(f.RosterPath, f.NodePath, ""); len(pending) > 0 {
+		fmt.Printf("\nmachines offering to relay in flock %q:\n", f.Name)
 	}
-	fmt.Printf("\nconnectors waiting to register in flock %q:\n", f.Name)
-	if _, err := master.AcceptOffers(f.RosterPath, f.KeyPath, f.NodePath, "", os.Stdout); err != nil {
+	if _, err := master.AcceptOffers(f.RosterPath, f.KeyPath, f.NodePath, "", maxRelays, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
 	}
 }
 
 // report prints where a flock stands, without failing if it cannot be reached.
 func report(f *local.Flock) {
-	cl, err := master.Open(f.RosterPath, f.NodePath, "")
-	if err != nil {
-		fmt.Printf("\nnot reachable from here right now: %v\n", err)
-		fmt.Printf("start a connector, then run `ssheep see`.\n")
-		return
+	// Reload: accepting offers above may just have added a relay.
+	if sr, err := flock.LoadSignedRoster(f.RosterPath); err == nil {
+		if r, err := sr.Verify(); err == nil {
+			f.Roster = r
+		}
 	}
-	defer cl.Close()
-	reply, err := cl.List(10 * time.Second)
-	if err != nil {
-		fmt.Printf("\nthe flock did not answer: %v\n", err)
+	reply, answered, err := master.ListAll(f.RosterPath, f.NodePath, "", 10*time.Second)
+	if err != nil && len(answered) == 0 {
+		fmt.Printf("\nnot reachable from here right now: %v\n", err)
+		fmt.Printf("it keeps trying; `ssheep see` shows the flock once a relay answers.\n")
 		return
 	}
 	online := 0
@@ -272,16 +281,21 @@ func report(f *local.Flock) {
 			online++
 		}
 	}
-	fmt.Printf("\nflock %q — %d of %d machines online, via %s\n", f.Name, online, len(reply.Members), cl.Connector())
+	fmt.Printf("\nflock %q — %d of %d machines online, via %d relay(s)\n", f.Name, online, len(reply.Members), len(answered))
+	relays := relaysByMember(f.Roster)
 	for _, m := range reply.Members {
 		mark := " "
 		if m.Online {
 			mark = "•"
 		}
-		fmt.Printf("  %s %-14s %s\n", mark, m.Name, m.Role)
+		role := m.Role
+		if addr, ok := relays[m.ID]; ok {
+			role = m.Role + "  relaying at " + addr
+		}
+		fmt.Printf("  %s %-14s %s\n", mark, m.Name, role)
 	}
-	if len(reply.Offers) > 0 {
-		fmt.Printf("\n%d connector(s) waiting to register — run `ssheep master %q`\n", len(reply.Offers), f.Name)
+	if n := len(waitingMachines(reply.Offers, f.Roster)); n > 0 {
+		fmt.Printf("\n%d machine(s) offered to relay but cannot be reached from here — they stay sheep\n", n)
 	}
 }
 
@@ -296,7 +310,7 @@ func watchFlock(f *local.Flock, d time.Duration) error {
 
 		if f.Mastered() {
 			if pending, _ := master.PendingOffers(f.RosterPath, f.NodePath, ""); len(pending) > 0 {
-				if _, err := master.AcceptOffers(f.RosterPath, f.KeyPath, f.NodePath, "", os.Stdout); err != nil {
+				if _, err := master.AcceptOffers(f.RosterPath, f.KeyPath, f.NodePath, "", maxRelays, os.Stdout); err != nil {
 					fmt.Fprintf(os.Stderr, "ssheep: %v\n", err)
 				}
 			}

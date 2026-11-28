@@ -6,7 +6,12 @@ Notes for an agent picking this repo up. Read this first, then
 ## What it is
 
 Control machines ("sheep") from a machine you hold ("the master") through a blind
-relay ("a connector"). One Go binary does all three roles.
+relay ("a connector"). One Go binary does all the roles.
+
+A sheep that can be reached also *is* a connector: it runs the relay itself and
+offers itself to the flock, so the operator never picks one. Only machines that
+cannot be reached stay sheep. See the "How a machine becomes a relay" section of
+`docs/ARCHITECTURE.md`.
 
 **It is an early prototype and is not secure.** Do not present it otherwise.
 
@@ -48,13 +53,15 @@ elsewhere, accepts any connector that has registered itself, and reports.
 Everything it picks is a default that a flag can override — the point is that
 nobody has to read the flags. Run it again with another name for a second flock.
 
-`ssheep sheep "<ticket>"` and `ssheep connector "<ticket>"` are the other two, and
-`ssheep join "<ticket>"` is what the printed one-liner calls: it reads the role
-out of the ticket, so nobody has to name it. All take the ticket as a positional
-argument because that is what people paste. With no ticket they carry on doing
-what the machine is already enrolled as, so a restart never changes a machine's
-role. A machine can be enrolled in several flocks; each is served side by side,
-with its own key from `internal/local`.
+`ssheep sheep "<ticket>"` joins as a sheep and serves; a sheep that can be reached
+starts relaying for its flocks on its own, so there is no connector to pick and no
+connector line printed. `ssheep connector "<ticket>"` is still there for a machine
+whose only job should be relaying, and `ssheep join "<ticket>"` is what the printed
+one-liner calls: it reads the role out of the ticket, so nobody has to name it. All
+take the ticket as a positional argument because that is what people paste. With no
+ticket they carry on doing what the machine is already enrolled as, so a restart
+never changes a machine's role. A machine can be enrolled in several flocks; each is
+served side by side, with its own key from `internal/local`.
 
 A master ticket is the only one that carries `invite.Invite.Flock`, the flock key.
 That is what makes a second master a real master — and why `--masters` defaults to
@@ -95,7 +102,10 @@ protection, and the roster announcement).
   examples to follow.
 - Errors are lowercase and prefixed with the package or command name
   (`flock: ...`, `sheep: ...`).
-- Roles are `sheep`, `master` and `connector`. The emoji are 👑 and 🐑.
+- Roles are `sheep`, `master` and `connector`. The emoji are 👑 and 🐑 (and 📡 for
+  a dedicated relay). A `sheep` or `master` whose ticket sets the `relay` flag may
+  also offer itself as a relay — that flag is on every ticket, which is what makes
+  relaying automatic, and it is a gate only the master can open.
 - Do not add a dependency, a config file format, or a subcommand without a
   concrete need. The whole pitch is that it stays small.
 
@@ -137,6 +147,16 @@ drop, and the next shell from that machine is refused.
 tool calls is a lost update: both read, both write, the later one wins, and the
 earlier change is silently gone. One edit at a time, or one edit that does both
 things.
+
+## One trap in automatic relaying
+
+**A machine may hold only one connection to a relay.** The relay keeps one session
+per member (`flockState.addPeer`), so a machine that connects twice as itself has
+its two connections evict each other, over and over — and a command routed to
+whichever one happens to be current times out. So a sheep that relays offers
+itself *on the connection it already holds* (`sheep.offerOn`), never on a
+connection of its own. If you ever add a second path to a relay, check this first:
+it looks like flakiness, not breakage.
 
 ## Test environment
 
